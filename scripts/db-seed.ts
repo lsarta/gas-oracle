@@ -18,6 +18,12 @@ const STATIONS: SeedStation[] = [
   { name: "Chevron", address: "2401 Lombard St, San Francisco",      lat: 37.7991, lng: -122.4378, price: 5.59, hours_ago: 8 },
   { name: "Valero",  address: "3550 Geary Blvd, San Francisco",      lat: 37.7811, lng: -122.4541, price: 5.19, hours_ago: 24 },
   { name: "Arco",    address: "1500 Sloat Blvd, San Francisco",      lat: 37.7349, lng: -122.4926, price: 5.09, hours_ago: 1 },
+  // Stale-priced opportunities (>12h) — seed the demo with high-bounty stations.
+  { name: "76",      address: "699 Battery St, San Francisco",        lat: 37.7964, lng: -122.4007, price: 5.79, hours_ago: 18 },
+  { name: "Shell",   address: "2300 16th St, San Francisco",          lat: 37.7654, lng: -122.4099, price: 5.49, hours_ago: 30 },
+  { name: "Chevron", address: "598 Bay St, San Francisco",            lat: 37.8053, lng: -122.4135, price: 5.69, hours_ago: 14 },
+  { name: "Valero",  address: "699 Divisadero St, San Francisco",     lat: 37.7762, lng: -122.4377, price: 5.35, hours_ago: 26 },
+  { name: "Arco",    address: "850 Bryant St, San Francisco",         lat: 37.7752, lng: -122.4035, price: 5.15, hours_ago: 36 },
 ];
 
 async function main() {

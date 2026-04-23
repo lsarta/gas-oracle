@@ -1,7 +1,13 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { motion, useMotionValue, useTransform, animate } from "framer-motion";
+import {
+  motion,
+  useMotionValue,
+  useTransform,
+  animate,
+  cubicBezier,
+} from "framer-motion";
 import { usePrivy } from "@privy-io/react-auth";
 import {
   Dialog,
@@ -13,6 +19,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
+import { ExternalLink } from "lucide-react";
 
 type Stage = "form" | "verifying" | "settling" | "delivered" | "error";
 
@@ -22,18 +29,35 @@ type StationLite = {
 };
 
 const ARC_EXPLORER_TX = "https://testnet.arcscan.app/tx";
+const AUTO_CLOSE_MS = 4000;
+
+const easeOutQuart = cubicBezier(0.25, 1, 0.5, 1);
 
 function CashbackCounter({ value }: { value: number }) {
   const mv = useMotionValue(0);
-  const display = useTransform(mv, (v) => `$${v.toFixed(3)} USDC`);
+  const display = useTransform(mv, (v) => `$${v.toFixed(3)}`);
   useEffect(() => {
-    const controls = animate(mv, value, { duration: 1.2, ease: "easeOut" });
+    const controls = animate(mv, value, { duration: 0.8, ease: easeOutQuart });
     return () => controls.stop();
   }, [mv, value]);
   return (
-    <motion.span className="text-3xl font-semibold tabular-nums text-emerald-600">
-      {display}
-    </motion.span>
+    <div className="flex items-baseline gap-1">
+      <motion.span className="font-mono text-5xl font-semibold tracking-tight text-emerald-600">
+        {display}
+      </motion.span>
+      <span className="font-mono text-sm font-medium text-emerald-700">USDC</span>
+    </div>
+  );
+}
+
+function AutoCloseBar({ durationMs }: { durationMs: number }) {
+  return (
+    <motion.div
+      className="absolute bottom-0 left-0 h-0.5 bg-emerald-500"
+      initial={{ width: "100%" }}
+      animate={{ width: "0%" }}
+      transition={{ duration: durationMs / 1000, ease: "linear" }}
+    />
   );
 }
 
@@ -98,7 +122,7 @@ export function ReportDialog({
 
   useEffect(() => {
     if (stage !== "delivered") return;
-    const id = setTimeout(onClose, 4000);
+    const id = setTimeout(onClose, AUTO_CLOSE_MS);
     return () => clearTimeout(id);
   }, [stage, onClose]);
 
@@ -141,7 +165,7 @@ export function ReportDialog({
 
   return (
     <Dialog open={isOpen} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="relative overflow-hidden sm:max-w-md">
         <DialogHeader>
           <DialogTitle>{station?.name ?? "Report a fill-up"}</DialogTitle>
           <DialogDescription>
@@ -154,7 +178,7 @@ export function ReportDialog({
             <div className="space-y-1.5">
               <Label htmlFor="amount">How much did you spend?</Label>
               <div className="relative">
-                <span className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground">
+                <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 font-mono text-base font-medium text-muted-foreground">
                   $
                 </span>
                 <Input
@@ -162,7 +186,7 @@ export function ReportDialog({
                   inputMode="decimal"
                   value={amount}
                   onChange={(e) => setAmount(e.target.value)}
-                  className="pl-6"
+                  className="h-11 pl-7 font-mono text-lg tracking-tight"
                 />
               </div>
             </div>
@@ -174,18 +198,19 @@ export function ReportDialog({
                 inputMode="decimal"
                 value={gallons}
                 onChange={(e) => setGallons(e.target.value)}
+                className="h-11 font-mono text-lg tracking-tight"
               />
             </div>
 
-            <div className="rounded-md border bg-muted/40 px-3 py-2 text-sm">
-              <span className="text-muted-foreground">Implied price: </span>
-              <span className="font-semibold tabular-nums text-foreground">
+            <div className="flex items-center justify-between rounded-lg bg-muted/60 px-3 py-2 text-sm">
+              <span className="text-muted-foreground">Implied price</span>
+              <span className="font-mono text-base font-semibold tabular-nums text-foreground">
                 {impliedPrice !== null ? `$${impliedPrice.toFixed(2)}/gal` : "—"}
               </span>
             </div>
 
             <Button
-              className="w-full"
+              className="h-11 w-full bg-emerald-600 text-white hover:bg-emerald-700"
               disabled={!canSubmit}
               onClick={handleSubmit}
             >
@@ -195,8 +220,8 @@ export function ReportDialog({
         )}
 
         {(stage === "verifying" || stage === "settling") && (
-          <div className="flex flex-col items-center gap-2 py-8">
-            <div className="h-8 w-8 animate-spin rounded-full border-2 border-muted border-t-foreground" />
+          <div className="flex flex-col items-center gap-2 py-10">
+            <div className="h-8 w-8 animate-spin rounded-full border-2 border-muted border-t-emerald-600" />
             <p className="text-sm text-muted-foreground">
               {stage === "verifying" ? "Verifying..." : "Settling on Arc..."}
             </p>
@@ -204,18 +229,24 @@ export function ReportDialog({
         )}
 
         {stage === "delivered" && result && (
-          <div className="flex flex-col items-center gap-3 py-6 text-center">
-            <p className="text-sm text-muted-foreground">Cashback delivered</p>
-            <CashbackCounter value={result.payoutAmountUsdc} />
-            <a
-              href={`${ARC_EXPLORER_TX}/${result.payoutTxHash}`}
-              target="_blank"
-              rel="noreferrer"
-              className="break-all font-mono text-xs text-muted-foreground underline-offset-4 hover:underline"
-            >
-              {result.payoutTxHash}
-            </a>
-          </div>
+          <>
+            <div className="flex flex-col items-center gap-4 py-8 text-center">
+              <p className="font-mono text-[11px] uppercase tracking-[0.12em] text-muted-foreground">
+                Cashback delivered
+              </p>
+              <CashbackCounter value={result.payoutAmountUsdc} />
+              <a
+                href={`${ARC_EXPLORER_TX}/${result.payoutTxHash}`}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-1.5 break-all font-mono text-xs text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+              >
+                {result.payoutTxHash.slice(0, 10)}…{result.payoutTxHash.slice(-8)}
+                <ExternalLink className="h-3 w-3" />
+              </a>
+            </div>
+            <AutoCloseBar durationMs={AUTO_CLOSE_MS} />
+          </>
         )}
 
         {stage === "error" && (

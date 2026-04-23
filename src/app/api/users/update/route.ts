@@ -1,0 +1,42 @@
+import { NextRequest } from "next/server";
+import { z } from "zod";
+import { createClient } from "@/lib/db/client";
+
+const BodySchema = z.object({
+  walletAddress: z.string().regex(/^0x[a-fA-F0-9]{40}$/),
+  homeLat: z.number().min(-90).max(90).optional(),
+  homeLng: z.number().min(-180).max(180).optional(),
+});
+
+export async function POST(request: NextRequest) {
+  let parsed;
+  try {
+    parsed = BodySchema.parse(await request.json());
+  } catch (err) {
+    return Response.json(
+      { error: "Invalid body", detail: err instanceof Error ? err.message : String(err) },
+      { status: 400 },
+    );
+  }
+
+  const { walletAddress, homeLat, homeLng } = parsed;
+
+  const client = createClient();
+  await client.connect();
+  try {
+    const res = await client.query(
+      `UPDATE users
+         SET home_lat = COALESCE($1, home_lat),
+             home_lng = COALESCE($2, home_lng)
+       WHERE wallet_address = $3
+       RETURNING id, home_lat, home_lng`,
+      [homeLat ?? null, homeLng ?? null, walletAddress],
+    );
+    if (res.rows.length === 0) {
+      return Response.json({ error: "user not found" }, { status: 404 });
+    }
+    return Response.json({ user: res.rows[0] });
+  } finally {
+    await client.end();
+  }
+}

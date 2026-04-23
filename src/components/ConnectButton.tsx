@@ -19,13 +19,16 @@ export function ConnectButton() {
   const { ready, authenticated, user, login, logout } = usePrivy();
 
   if (!ready) {
-    return <div className="h-9 w-28 animate-pulse rounded-md bg-muted" aria-label="loading" />;
+    return <div className="h-8 w-28 animate-pulse rounded-md bg-muted" aria-label="loading" />;
   }
 
   if (!authenticated) {
     return (
-      <Button onClick={login} size="sm">
-        <Wallet className="mr-2 h-4 w-4" />
+      <Button
+        onClick={login}
+        size="sm"
+        className="bg-emerald-600 font-medium text-white hover:bg-emerald-700"
+      >
         Sign in
       </Button>
     );
@@ -35,8 +38,16 @@ export function ConnectButton() {
 
   return (
     <DropdownMenu>
-      <DropdownMenuTrigger render={<Button variant="outline" size="sm" className="font-mono" />}>
-        <Wallet className="mr-2 h-4 w-4" />
+      <DropdownMenuTrigger
+        render={
+          <Button
+            variant="outline"
+            size="sm"
+            className="font-mono text-[12px] font-medium tracking-tight transition-colors"
+          />
+        }
+      >
+        <Wallet className="mr-1.5 h-3.5 w-3.5 text-muted-foreground" />
         {truncate(address) || "Connected"}
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
