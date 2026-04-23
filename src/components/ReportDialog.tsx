@@ -186,10 +186,12 @@ export function ReportDialog({
   return (
     <Dialog open={isOpen} onOpenChange={(o) => !o && onClose()}>
       <DialogContent
-        className={`relative overflow-hidden border-zinc-200 sm:max-w-[420px] ${
+        className={`relative max-h-[calc(100vh-2rem)] overflow-hidden border-zinc-200 p-0 sm:max-w-[420px] ${
           isSuccess ? "bg-gradient-to-b from-emerald-50/40 to-white" : "bg-white"
         }`}
+        showCloseButton={false}
       >
+        <div className="max-h-[calc(100vh-2rem)] overflow-y-auto p-4">
         {stage === "form" && (
           <>
             <DialogHeader>
@@ -295,7 +297,6 @@ export function ReportDialog({
                 <ExternalLink className="h-3.5 w-3.5" />
               </a>
             </div>
-            <AutoCloseBar durationMs={AUTO_CLOSE_MS} />
           </>
         )}
 
@@ -312,6 +313,8 @@ export function ReportDialog({
             </button>
           </div>
         )}
+        </div>
+        {isSuccess && <AutoCloseBar durationMs={AUTO_CLOSE_MS} />}
       </DialogContent>
     </Dialog>
   );
