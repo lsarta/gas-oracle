@@ -19,6 +19,7 @@
   "dependencies": {
     "@base-ui/react": "^1.4.1",
     "@circle-fin/x402-batching": "^3.0.2",
+    "@fontsource/inter": "^5.2.8",
     "@privy-io/react-auth": "^3.22.1",
     "@supabase/supabase-js": "^2.104.0",
     "@types/express": "^5.0.6",

@@ -10,7 +10,6 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
-import { Button } from "@/components/ui/button";
 import { ReportDialog } from "@/components/ReportDialog";
 
 export type Station = {
@@ -26,49 +25,82 @@ export type Station = {
 
 const POLL_MS = 5000;
 
-function freshnessColor(lastPricedAt: string | null): string {
-  if (!lastPricedAt) return "#ef4444";
+type Tier = "fresh" | "aging" | "stale" | "none";
+
+function tierFor(lastPricedAt: string | null): Tier {
+  if (!lastPricedAt) return "none";
   const ageMs = Date.now() - new Date(lastPricedAt).getTime();
-  if (ageMs < 60 * 60 * 1000) return "#10b981";
-  if (ageMs < 6 * 60 * 60 * 1000) return "#f59e0b";
-  return "#ef4444";
+  if (ageMs < 60 * 60 * 1000) return "fresh";
+  if (ageMs < 6 * 60 * 60 * 1000) return "aging";
+  return "stale";
 }
 
-function buildMarkerEl(color: string): HTMLElement {
+const TIER_FILL: Record<Tier, string> = {
+  fresh: "#10b981",
+  aging: "#f59e0b",
+  stale: "#f87171",
+  none: "#f87171",
+};
+
+function buildMarkerEl(tier: Tier): HTMLElement {
   const el = document.createElement("div");
-  el.style.width = "32px";
-  el.style.height = "32px";
-  el.style.borderRadius = "50%";
-  el.style.background = color;
-  el.style.boxShadow = "0 0 0 3px white, 0 2px 6px rgba(0,0,0,0.18)";
+  el.style.position = "relative";
+  el.style.width = "20px";
+  el.style.height = "20px";
   el.style.cursor = "pointer";
-  el.style.display = "flex";
-  el.style.alignItems = "center";
-  el.style.justifyContent = "center";
-  el.style.transition =
-    "background-color 400ms ease, transform 200ms ease, box-shadow 200ms ease";
+
+  const isStale = tier === "stale" || tier === "none";
+
+  const pulse = document.createElement("span");
+  pulse.style.position = "absolute";
+  pulse.style.inset = "0";
+  pulse.style.borderRadius = "9999px";
+  pulse.style.background = TIER_FILL[tier];
+  if (isStale) {
+    pulse.className = "gyas-stale-pulse";
+  } else {
+    pulse.style.display = "none";
+  }
+  el.appendChild(pulse);
+
+  const dot = document.createElement("span");
+  dot.style.position = "absolute";
+  dot.style.inset = "0";
+  dot.style.borderRadius = "9999px";
+  dot.style.background = TIER_FILL[tier];
+  dot.style.boxShadow =
+    "0 0 0 1.5px #ffffff, 0 1px 3px rgba(0,0,0,0.15)";
+  dot.style.display = "flex";
+  dot.style.alignItems = "center";
+  dot.style.justifyContent = "center";
+  dot.style.transition = "transform 200ms ease-out, box-shadow 200ms ease-out";
+  dot.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="22" x2="15" y2="22"/><line x1="4" y1="9" x2="14" y2="9"/><path d="M14 22V4a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v18"/><path d="M14 13h2a2 2 0 0 1 2 2v2a2 2 0 0 0 2 2a2 2 0 0 0 2-2V9.83a2 2 0 0 0-.59-1.42L18 5"/></svg>`;
+  el.appendChild(dot);
+
   el.addEventListener("mouseenter", () => {
-    el.style.transform = "scale(1.08)";
+    dot.style.transform = "scale(1.15)";
+    dot.style.boxShadow =
+      "0 0 0 1.5px #059669, 0 1px 4px rgba(0,0,0,0.18)";
   });
   el.addEventListener("mouseleave", () => {
-    el.style.transform = "scale(1)";
+    dot.style.transform = "scale(1)";
+    dot.style.boxShadow =
+      "0 0 0 1.5px #ffffff, 0 1px 3px rgba(0,0,0,0.15)";
   });
-  el.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="22" x2="15" y2="22"/><line x1="4" y1="9" x2="14" y2="9"/><path d="M14 22V4a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v18"/><path d="M14 13h2a2 2 0 0 1 2 2v2a2 2 0 0 0 2 2a2 2 0 0 0 2-2V9.83a2 2 0 0 0-.59-1.42L18 5"/></svg>`;
+
   return el;
 }
 
-function freshnessBadgeClasses(lastPricedAt: string | null): string {
-  if (!lastPricedAt) return "bg-red-100 text-red-700";
-  const ageMs = Date.now() - new Date(lastPricedAt).getTime();
-  if (ageMs < 60 * 60 * 1000) return "bg-emerald-100 text-emerald-700";
-  if (ageMs < 6 * 60 * 60 * 1000) return "bg-amber-100 text-amber-700";
-  return "bg-red-100 text-red-700";
+function freshnessBadgeClasses(tier: Tier): string {
+  if (tier === "fresh") return "bg-emerald-50 text-emerald-700";
+  if (tier === "aging") return "bg-amber-50 text-amber-700";
+  return "bg-red-50 text-red-700";
 }
 
 export function StationMap({ canReport }: { canReport: boolean }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<mapboxgl.Map | null>(null);
-  const markersRef = useRef<Map<string, { marker: mapboxgl.Marker; color: string }>>(
+  const markersRef = useRef<Map<string, { marker: mapboxgl.Marker; tier: Tier }>>(
     new Map(),
   );
   const [stations, setStations] = useState<Station[]>([]);
@@ -85,11 +117,14 @@ export function StationMap({ canReport }: { canReport: boolean }) {
     mapboxgl.accessToken = token;
     mapRef.current = new mapboxgl.Map({
       container: containerRef.current,
-      style: "mapbox://styles/mapbox/navigation-day-v1",
+      style: "mapbox://styles/mapbox/light-v11",
       center: [-122.4194, 37.7749],
       zoom: 12,
     });
-    mapRef.current.addControl(new mapboxgl.NavigationControl({ showCompass: false }), "top-right");
+    mapRef.current.addControl(
+      new mapboxgl.NavigationControl({ showCompass: false }),
+      "top-right",
+    );
 
     return () => {
       mapRef.current?.remove();
@@ -125,16 +160,26 @@ export function StationMap({ canReport }: { canReport: boolean }) {
     const seen = new Set<string>();
     for (const s of stations) {
       seen.add(s.id);
-      const color = freshnessColor(s.lastPricedAt);
+      const tier = tierFor(s.lastPricedAt);
       const existing = markersRef.current.get(s.id);
       if (existing) {
-        if (existing.color !== color) {
-          existing.marker.getElement().style.background = color;
-          markersRef.current.set(s.id, { marker: existing.marker, color });
+        if (existing.tier !== tier) {
+          // Tier changed — rebuild element to re-trigger pulse state.
+          existing.marker.remove();
+          const el = buildMarkerEl(tier);
+          el.addEventListener("click", (e) => {
+            e.stopPropagation();
+            setSelectedId(s.id);
+          });
+          const marker = new mapboxgl.Marker({ element: el })
+            .setLngLat([s.lng, s.lat])
+            .addTo(map);
+          markersRef.current.set(s.id, { marker, tier });
+        } else {
+          existing.marker.setLngLat([s.lng, s.lat]);
         }
-        existing.marker.setLngLat([s.lng, s.lat]);
       } else {
-        const el = buildMarkerEl(color);
+        const el = buildMarkerEl(tier);
         el.addEventListener("click", (e) => {
           e.stopPropagation();
           setSelectedId(s.id);
@@ -142,7 +187,7 @@ export function StationMap({ canReport }: { canReport: boolean }) {
         const marker = new mapboxgl.Marker({ element: el })
           .setLngLat([s.lng, s.lat])
           .addTo(map);
-        markersRef.current.set(s.id, { marker, color });
+        markersRef.current.set(s.id, { marker, tier });
       }
     }
     for (const [id, { marker }] of markersRef.current) {
@@ -154,55 +199,59 @@ export function StationMap({ canReport }: { canReport: boolean }) {
   }, [stations]);
 
   const selected = stations.find((s) => s.id === selectedId) ?? null;
+  const selectedTier = selected ? tierFor(selected.lastPricedAt) : "none";
 
   return (
     <>
       <div ref={containerRef} className="h-full w-full" />
 
       <Sheet open={selectedId !== null} onOpenChange={(o) => !o && setSelectedId(null)}>
-        <SheetContent side="bottom" className="max-h-[60vh] rounded-t-2xl pb-6 pt-2">
-          <div className="mx-auto mt-1 mb-1 h-1 w-10 rounded-full bg-muted-foreground/30" />
+        <SheetContent
+          side="bottom"
+          className="max-h-[60vh] rounded-t-2xl border-zinc-200 bg-[#FAFAF8] pb-6 pt-2"
+        >
+          <div className="mx-auto mt-3 mb-2 h-1 w-9 rounded-full bg-zinc-300" />
           {selected && (
             <>
-              <SheetHeader className="pb-2">
-                <SheetTitle className="text-xl font-semibold tracking-tight">
+              <SheetHeader className="px-5 pb-3">
+                <SheetTitle className="text-[20px] font-medium text-zinc-900">
                   {selected.name}
                 </SheetTitle>
-                <SheetDescription className="text-xs">
+                <SheetDescription className="text-[13px] text-zinc-500">
                   {selected.address}
                 </SheetDescription>
               </SheetHeader>
-              <div className="space-y-5 px-4">
+              <div className="space-y-5 px-5">
                 <div className="flex items-end justify-between gap-3">
-                  <div className="flex items-baseline gap-1.5">
-                    <span className="font-mono text-4xl font-semibold tracking-tight">
-                      {selected.currentPricePerGallon !== null
-                        ? `$${selected.currentPricePerGallon.toFixed(2)}`
-                        : "—"}
-                    </span>
-                    <span className="text-xs text-muted-foreground">/gal</span>
+                  <div className="font-mono text-[40px] font-medium leading-none tracking-tight text-zinc-900">
+                    {selected.currentPricePerGallon !== null
+                      ? `$${selected.currentPricePerGallon.toFixed(2)}`
+                      : "—"}
+                    <span className="ml-1 text-[14px] font-normal text-zinc-500">/gal</span>
                   </div>
                   <span
-                    className={`rounded-full px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider ${freshnessBadgeClasses(selected.lastPricedAt)}`}
+                    className={`rounded-full px-3 py-1 font-inter text-[11px] font-medium uppercase tracking-wider ${freshnessBadgeClasses(selectedTier)}`}
                   >
                     {selected.freshness}
                   </span>
                 </div>
                 {canReport ? (
-                  <Button
-                    size="lg"
-                    className="h-11 w-full bg-emerald-600 text-white hover:bg-emerald-700"
+                  <button
                     onClick={() => {
                       setReportingId(selected.id);
                       setSelectedId(null);
                     }}
+                    className="inline-flex h-11 w-full items-center justify-center rounded-lg bg-emerald-600 text-[15px] font-medium text-white transition-colors hover:bg-emerald-700"
                   >
                     I bought gas here
-                  </Button>
+                  </button>
                 ) : (
-                  <Button size="lg" className="h-11 w-full" disabled>
+                  <button
+                    disabled
+                    className="inline-flex h-11 w-full items-center justify-center rounded-lg border border-zinc-200 bg-white text-[15px] font-medium text-zinc-700 disabled:opacity-70"
+                  >
                     Sign in to report
-                  </Button>
+                  </button>
                 )}
               </div>
             </>

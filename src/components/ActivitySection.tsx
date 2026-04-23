@@ -1,9 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Button } from "@/components/ui/button";
 import { ReportDialog } from "@/components/ReportDialog";
-import { ChevronDown } from "lucide-react";
 
 type Me = {
   totalEarnedUsdc: number;
@@ -87,95 +85,103 @@ export function ActivitySection({ wallet }: { wallet: string }) {
       .catch(() => {});
   }, []);
 
+  const earnings = me?.totalEarnedUsdc ?? 0;
+  const savings = me?.totalSavedUsd ?? 0;
+
   return (
     <>
-      <section className="mx-auto mt-8 w-full max-w-[600px]">
-        <div className="grid grid-cols-2 gap-3">
-          <div className="rounded-2xl border bg-card p-5">
-            <div className="font-mono text-[11px] uppercase tracking-[0.12em] text-muted-foreground">
+      <section className="mx-auto mt-12 w-full max-w-[560px]">
+        <p className="font-inter text-[11px] font-medium uppercase tracking-wider text-zinc-500">
+          Your activity
+        </p>
+
+        <div className="mt-3 grid grid-cols-2 gap-4">
+          <div className="rounded-xl border border-zinc-200 bg-white p-5">
+            <p className="font-inter text-[11px] font-medium uppercase tracking-wider text-zinc-500">
               Lifetime savings
-            </div>
-            <div className="mt-2 font-mono text-2xl font-semibold tracking-tight sm:text-3xl">
-              ${(me?.totalSavedUsd ?? 0).toFixed(2)}
-            </div>
-            <div className="mt-1 text-[11px] leading-snug text-muted-foreground">
-              from following our recommendations
-            </div>
+            </p>
+            <p className="mt-2 font-mono text-[28px] font-medium leading-none tracking-tight text-zinc-900">
+              {savings > 0 ? `$${savings.toFixed(2)}` : "—"}
+            </p>
+            {savings === 0 && (
+              <p className="mt-2 text-[12px] leading-snug text-zinc-500">
+                Activates when route-following is enabled.
+              </p>
+            )}
           </div>
-          <div className="rounded-2xl border bg-card p-5">
-            <div className="font-mono text-[11px] uppercase tracking-[0.12em] text-muted-foreground">
+          <div className="rounded-xl border border-zinc-200 bg-white p-5">
+            <p className="font-inter text-[11px] font-medium uppercase tracking-wider text-zinc-500">
               Lifetime earnings
-            </div>
-            <div className="mt-2 font-mono text-2xl font-semibold tracking-tight text-emerald-600 sm:text-3xl">
-              ${(me?.totalEarnedUsdc ?? 0).toFixed(6)}
-            </div>
-            <div className="mt-1 text-[11px] leading-snug text-muted-foreground">
-              USDC for confirming gas prices
-            </div>
+            </p>
+            <p
+              className={`mt-2 font-mono text-[28px] font-medium leading-none tracking-tight ${earnings > 0 ? "text-emerald-600" : "text-zinc-900"}`}
+            >
+              ${earnings.toFixed(3)}
+            </p>
           </div>
         </div>
 
-        <div className="mt-6 rounded-2xl border bg-card">
-          <div className="flex items-center justify-between border-b px-5 py-3">
-            <div className="font-mono text-[11px] uppercase tracking-[0.12em] text-muted-foreground">
-              Recent activity
-            </div>
-            <div className="relative">
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setPickerOpen((o) => !o)}
-              >
-                Report a price <ChevronDown className="ml-1 h-3 w-3" />
-              </Button>
-              {pickerOpen && (
-                <div className="absolute right-0 top-full z-20 mt-1 max-h-72 w-72 overflow-y-auto rounded-md border bg-popover p-1 shadow-md">
-                  {stations.map((s) => (
-                    <button
-                      key={s.id}
-                      type="button"
-                      className="block w-full rounded px-2 py-2 text-left text-sm hover:bg-muted"
-                      onClick={() => {
-                        setReporting(s.id);
-                        setPickerOpen(false);
-                      }}
-                    >
-                      <div className="font-medium">{s.name}</div>
-                      <div className="truncate text-[11px] text-muted-foreground">
-                        {s.address}
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
+        <p className="mt-8 font-inter text-[11px] font-medium uppercase tracking-wider text-zinc-500">
+          Recent
+        </p>
+
+        {reports.length === 0 ? (
+          <div className="mt-3">
+            <p className="text-[14px] text-zinc-500">No reports yet.</p>
+            <p className="mt-1 text-[12px] text-zinc-400">
+              Tap the map to confirm a price.
+            </p>
           </div>
-          {reports.length === 0 ? (
-            <div className="px-5 py-8 text-center text-sm text-muted-foreground">
-              No reports yet — confirm your first gas price to start earning.
-            </div>
-          ) : (
-            <ul className="divide-y">
-              {reports.map((r) => (
-                <li
-                  key={r.id}
-                  className="flex items-center justify-between gap-3 px-5 py-3 text-sm transition-colors hover:bg-muted/40"
+        ) : (
+          <ul className="mt-3 divide-y divide-zinc-100">
+            {reports.map((r) => (
+              <li key={r.id} className="flex items-center justify-between gap-3 py-3">
+                <div className="min-w-0">
+                  <div className="truncate text-[14px] text-zinc-900">{r.stationName}</div>
+                  <div className="mt-0.5 font-mono text-[11px] text-zinc-500">
+                    {r.pricePerGallon !== null
+                      ? `$${r.pricePerGallon.toFixed(2)}/gal`
+                      : "no price"}
+                  </div>
+                </div>
+                <div className="text-right">
+                  <div className="font-mono text-[14px] text-emerald-600">
+                    +${(r.payoutAmountUsdc ?? 0).toFixed(3)} USDC
+                  </div>
+                  <div className="mt-0.5 text-[11px] text-zinc-400">
+                    {timeAgo(r.createdAt)}
+                  </div>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+
+        <div className="relative mt-6">
+          <button
+            type="button"
+            onClick={() => setPickerOpen((o) => !o)}
+            className="flex h-10 w-full items-center justify-center rounded-lg border border-zinc-200 bg-white text-[14px] text-zinc-700 transition-colors hover:border-zinc-300 hover:text-zinc-900"
+          >
+            Report a price
+          </button>
+          {pickerOpen && (
+            <div className="absolute right-0 top-full z-20 mt-1 max-h-72 w-full overflow-y-auto rounded-lg border border-zinc-200 bg-white p-1 shadow-sm">
+              {stations.map((s) => (
+                <button
+                  key={s.id}
+                  type="button"
+                  className="block w-full rounded-md px-3 py-2 text-left text-[14px] hover:bg-zinc-50"
+                  onClick={() => {
+                    setReporting(s.id);
+                    setPickerOpen(false);
+                  }}
                 >
-                  <div className="min-w-0">
-                    <div className="truncate font-medium">{r.stationName}</div>
-                    <div className="text-[11px] text-muted-foreground">
-                      {timeAgo(r.createdAt)}
-                      {r.pricePerGallon !== null
-                        ? ` · $${r.pricePerGallon.toFixed(2)}/gal`
-                        : ""}
-                    </div>
-                  </div>
-                  <div className="font-mono text-sm font-semibold tabular-nums text-emerald-600">
-                    +${(r.payoutAmountUsdc ?? 0).toFixed(3)}
-                  </div>
-                </li>
+                  <div className="font-medium text-zinc-900">{s.name}</div>
+                  <div className="truncate text-[11px] text-zinc-500">{s.address}</div>
+                </button>
               ))}
-            </ul>
+            </div>
           )}
         </div>
       </section>

@@ -1,8 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Button } from "@/components/ui/button";
-import { ReportDialog } from "@/components/ReportDialog";
 
 type Opportunity = {
   stationId: string;
@@ -34,27 +32,24 @@ const FALLBACK: Opportunity = {
   freshness: "demo",
 };
 
-function staticMapUrl(opportunity: Opportunity, origin: Origin | null): string {
+function staticMapUrl(opp: Opportunity, origin: Origin | null): string {
   const token = process.env.NEXT_PUBLIC_MAPBOX_TOKEN;
   if (!token) return "";
-  const stationPin = `pin-l-fuel+059669(${opportunity.lng},${opportunity.lat})`;
-  const homePin = origin
-    ? `,pin-s+737373(${origin.lng},${origin.lat})`
-    : "";
-  // Auto-fit by giving two coords; use [lng,lat,zoom,bearing] form when no auto.
-  // For two-point auto-bounds use the `auto` keyword.
-  const path =
-    origin && (origin.lat !== opportunity.lat || origin.lng !== opportunity.lng)
-      ? `path-3+9ca3af-0.5(${encodePath([
-          [origin.lng, origin.lat],
-          [opportunity.lng, opportunity.lat],
-        ])})`
-      : "";
-  const overlays = [stationPin + homePin, path].filter(Boolean).join(",");
-  return `https://api.mapbox.com/styles/v1/mapbox/navigation-day-v1/static/${overlays}/auto/600x200@2x?access_token=${token}&padding=40`;
+  const overlays: string[] = [];
+  if (origin && (origin.lat !== opp.lat || origin.lng !== opp.lng)) {
+    overlays.push(`pin-s+a1a1aa(${origin.lng},${origin.lat})`);
+    overlays.push(
+      `path-3+059669-0.55(${encodePath([
+        [origin.lng, origin.lat],
+        [opp.lng, opp.lat],
+      ])})`,
+    );
+  }
+  const overlayStr = overlays.length ? `${overlays.join(",")}/` : "";
+  // Center on destination at fixed zoom; we overlay our own pulsing pin via DOM.
+  return `https://api.mapbox.com/styles/v1/mapbox/light-v11/static/${overlayStr}${opp.lng},${opp.lat},13,0/600x180@2x?access_token=${token}&attribution=false&logo=false`;
 }
 
-// Simple polyline encoder (Google polyline algorithm) for two-point overlays.
 function encodePath(points: [number, number][]): string {
   let lastLat = 0;
   let lastLng = 0;
@@ -83,8 +78,6 @@ function encodeNum(num: number): string {
 export function OpportunityCard({ wallet }: { wallet?: string }) {
   const [opp, setOpp] = useState<Opportunity>(FALLBACK);
   const [origin, setOrigin] = useState<Origin | null>(null);
-  const [loaded, setLoaded] = useState(false);
-  const [reporting, setReporting] = useState<string | null>(null);
 
   useEffect(() => {
     let aborted = false;
@@ -97,101 +90,86 @@ export function OpportunityCard({ wallet }: { wallet?: string }) {
           setOpp(j.opportunity as Opportunity);
           setOrigin(j.origin as Origin);
         }
-        setLoaded(true);
       })
-      .catch(() => setLoaded(true));
+      .catch(() => {});
     return () => {
       aborted = true;
     };
   }, [wallet]);
 
   const directionsUrl = `https://www.google.com/maps/dir/?api=1&destination=${opp.lat},${opp.lng}`;
-  const mapUrl = staticMapUrl(opp, origin);
+  const showMap = !!(origin?.usedHome && process.env.NEXT_PUBLIC_MAPBOX_TOKEN);
+  const mapUrl = showMap ? staticMapUrl(opp, origin) : "";
   const showSavings = opp.savingsPerGallon >= 0.05;
 
   return (
-    <>
-      <section className="mx-auto w-full max-w-[600px]">
-        <div className="rounded-2xl border bg-card p-6 shadow-sm sm:p-8">
-          <div className="mb-2 font-mono text-[11px] uppercase tracking-[0.12em] text-muted-foreground">
-            Opportunity near you
-          </div>
+    <section className="mx-auto w-full max-w-[560px]">
+      <div className="rounded-xl border border-zinc-200 bg-[#FAFAF8] p-8 sm:p-10">
+        <p className="font-inter text-[11px] font-medium uppercase tracking-wider text-zinc-500">
+          Opportunity near you
+        </p>
 
-          {showSavings ? (
-            <>
-              <div className="font-mono text-4xl font-semibold tracking-tight text-emerald-600 sm:text-5xl">
-                ${opp.savingsPerGallon.toFixed(2)}/gal cheaper
-              </div>
-              <p className="mt-2 text-sm text-muted-foreground sm:text-base">
-                at <span className="text-foreground">{opp.name}</span>, {opp.detourMinutes} min off
-                your route
-              </p>
-            </>
-          ) : (
-            <>
-              <div className="font-mono text-4xl font-semibold tracking-tight sm:text-5xl">
-                ${opp.price.toFixed(2)}/gal
-              </div>
-              <p className="mt-2 text-sm text-muted-foreground sm:text-base">
-                cheapest near you · <span className="text-foreground">{opp.name}</span>,{" "}
-                {opp.detourMinutes} min away
-              </p>
-            </>
-          )}
-
-          {mapUrl && (
-            <div className="mt-5 overflow-hidden rounded-xl border bg-muted">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={mapUrl}
-                alt={`Map preview for ${opp.name}`}
-                width={600}
-                height={200}
-                className="h-[200px] w-full object-cover"
-                loading="lazy"
-              />
-            </div>
-          )}
-
-          <div className="mt-5 flex flex-col gap-2 sm:flex-row">
-            <Button
-              size="lg"
-              className="h-11 flex-1 bg-emerald-600 text-white hover:bg-emerald-700"
-              render={
-                <a href={directionsUrl} target="_blank" rel="noreferrer" />
-              }
-            >
-              Get directions
-            </Button>
-            <Button size="lg" variant="ghost" className="h-11 flex-1">
-              Not now
-            </Button>
-          </div>
-
-          {wallet && opp.stationId && (
-            <button
-              type="button"
-              className="mt-3 w-full text-center text-xs text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
-              onClick={() => setReporting(opp.stationId)}
-            >
-              I just bought gas here — log it
-            </button>
-          )}
-
-          <p className="mt-5 text-[11px] leading-relaxed text-muted-foreground">
-            {origin?.usedHome
-              ? "Auto-detected from your home address."
-              : "Auto-detected from your usual stations."}{" "}
-            We&apos;ll notify you when it&apos;s worth detouring.
+        {showSavings ? (
+          <p className="mt-3 font-mono text-[40px] font-medium leading-none tracking-tight text-emerald-600 sm:text-[48px]">
+            ${opp.savingsPerGallon.toFixed(2)}/gal cheaper
           </p>
+        ) : (
+          <p className="mt-3 font-mono text-[40px] font-medium leading-none tracking-tight text-zinc-900 sm:text-[48px]">
+            ${opp.price.toFixed(2)}/gal
+          </p>
+        )}
 
-          {!loaded && (
-            <div className="mt-3 text-[11px] text-muted-foreground">Loading…</div>
-          )}
+        <p className="mt-4 text-[20px] font-medium leading-snug text-zinc-900">
+          at {opp.name}, {opp.detourMinutes} min off your route
+        </p>
+        <p className="mt-2 text-[14px] leading-relaxed text-zinc-500">
+          Auto-detected from your commute. We notify you when it&apos;s worth detouring.
+        </p>
+
+        {showMap && mapUrl && (
+          <div className="relative mt-6 h-[180px] w-full overflow-hidden rounded-lg border border-zinc-200 bg-zinc-100">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={mapUrl}
+              alt={`Map preview for ${opp.name}`}
+              width={600}
+              height={180}
+              className="h-full w-full object-cover"
+              loading="lazy"
+            />
+            {/* Pulsing destination pin overlay, centered on map */}
+            <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+              <div className="relative h-3 w-3">
+                <span
+                  className="gyas-pin-pulse absolute inset-0 rounded-full bg-emerald-500"
+                  aria-hidden
+                />
+                <span
+                  className="absolute inset-0 rounded-full bg-emerald-600 ring-2 ring-white"
+                  aria-hidden
+                />
+              </div>
+            </div>
+          </div>
+        )}
+
+        <div className="mt-6 flex flex-col gap-2">
+          <a
+            href={directionsUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex h-11 items-center justify-center rounded-lg bg-emerald-600 text-[15px] font-medium text-white transition-colors hover:bg-emerald-700"
+          >
+            Get directions
+          </a>
+          <button
+            type="button"
+            className="text-center text-[14px] text-zinc-500 underline-offset-4 hover:text-zinc-900 hover:underline"
+          >
+            Not now
+          </button>
         </div>
-      </section>
-
-      <ReportDialog stationId={reporting} onClose={() => setReporting(null)} />
-    </>
+      </div>
+    </section>
   );
 }

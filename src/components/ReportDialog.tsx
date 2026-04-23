@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   motion,
+  AnimatePresence,
   useMotionValue,
   useTransform,
   animate,
@@ -16,10 +17,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Button } from "@/components/ui/button";
-import { ExternalLink } from "lucide-react";
+import { Check, ExternalLink, Loader2 } from "lucide-react";
 
 type Stage = "form" | "verifying" | "settling" | "delivered" | "error";
 
@@ -30,22 +28,21 @@ type StationLite = {
 
 const ARC_EXPLORER_TX = "https://testnet.arcscan.app/tx";
 const AUTO_CLOSE_MS = 4000;
-
-const easeOutQuart = cubicBezier(0.25, 1, 0.5, 1);
+const easeOutQuart = cubicBezier(0.22, 1, 0.36, 1);
 
 function CashbackCounter({ value }: { value: number }) {
   const mv = useMotionValue(0);
   const display = useTransform(mv, (v) => `$${v.toFixed(3)}`);
   useEffect(() => {
-    const controls = animate(mv, value, { duration: 0.8, ease: easeOutQuart });
+    const controls = animate(mv, value, { duration: 1.0, ease: easeOutQuart });
     return () => controls.stop();
   }, [mv, value]);
   return (
-    <div className="flex items-baseline gap-1">
-      <motion.span className="font-mono text-5xl font-semibold tracking-tight text-emerald-600">
+    <div className="flex items-baseline gap-2">
+      <motion.span className="font-mono text-[56px] font-medium leading-none tracking-tight text-emerald-600">
         {display}
       </motion.span>
-      <span className="font-mono text-sm font-medium text-emerald-700">USDC</span>
+      <span className="font-mono text-[16px] font-medium text-emerald-700">USDC</span>
     </div>
   );
 }
@@ -53,11 +50,32 @@ function CashbackCounter({ value }: { value: number }) {
 function AutoCloseBar({ durationMs }: { durationMs: number }) {
   return (
     <motion.div
-      className="absolute bottom-0 left-0 h-0.5 bg-emerald-500"
-      initial={{ width: "100%" }}
-      animate={{ width: "0%" }}
+      className="absolute bottom-0 left-0 h-0.5 bg-emerald-600"
+      initial={{ width: "0%" }}
+      animate={{ width: "100%" }}
       transition={{ duration: durationMs / 1000, ease: "linear" }}
     />
+  );
+}
+
+function LoadingState({ stage }: { stage: "verifying" | "settling" }) {
+  const text = stage === "verifying" ? "Verifying your price…" : "Settling on Arc…";
+  return (
+    <div className="flex flex-col items-center gap-4 py-12">
+      <Loader2 className="h-8 w-8 animate-spin text-emerald-600" strokeWidth={1.75} />
+      <AnimatePresence mode="wait">
+        <motion.p
+          key={text}
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.2 }}
+          className="text-[15px] text-zinc-900"
+        >
+          {text}
+        </motion.p>
+      </AnimatePresence>
+    </div>
   );
 }
 
@@ -133,7 +151,7 @@ export function ReportDialog({
 
     setTimeout(() => {
       setStage((s) => (s === "verifying" ? "settling" : s));
-    }, 600);
+    }, 1000);
 
     try {
       const res = await fetch("/api/reports", {
@@ -163,86 +181,118 @@ export function ReportDialog({
     }
   }
 
+  const isSuccess = stage === "delivered" && result;
+
   return (
     <Dialog open={isOpen} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="relative overflow-hidden sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle>{station?.name ?? "Report a fill-up"}</DialogTitle>
-          <DialogDescription>
-            We&apos;ll cross-check your price and pay cashback in USDC.
-          </DialogDescription>
-        </DialogHeader>
-
+      <DialogContent
+        className={`relative overflow-hidden border-zinc-200 sm:max-w-[420px] ${
+          isSuccess ? "bg-gradient-to-b from-emerald-50/40 to-white" : "bg-white"
+        }`}
+      >
         {stage === "form" && (
-          <div className="space-y-4 px-1">
-            <div className="space-y-1.5">
-              <Label htmlFor="amount">How much did you spend?</Label>
-              <div className="relative">
-                <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 font-mono text-base font-medium text-muted-foreground">
-                  $
-                </span>
-                <Input
-                  id="amount"
+          <>
+            <DialogHeader>
+              <DialogTitle className="text-[18px] font-medium text-zinc-900">
+                {station?.name ?? "Report a fill-up"}
+              </DialogTitle>
+              <DialogDescription className="text-[13px] text-zinc-500">
+                We&apos;ll verify your price and pay cashback in USDC.
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="space-y-4 px-1 pt-2">
+              <div className="space-y-1.5">
+                <label
+                  htmlFor="amount"
+                  className="font-inter text-[11px] font-medium uppercase tracking-wider text-zinc-500"
+                >
+                  Amount spent
+                </label>
+                <div className="relative">
+                  <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 font-mono text-[18px] text-zinc-400">
+                    $
+                  </span>
+                  <input
+                    id="amount"
+                    inputMode="decimal"
+                    value={amount}
+                    onChange={(e) => setAmount(e.target.value)}
+                    className="h-12 w-full rounded-lg border border-zinc-200 bg-white pl-8 pr-4 font-mono text-[18px] text-zinc-900 outline-none transition-colors focus:border-emerald-600 focus:ring-2 focus:ring-emerald-600/20"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <label
+                  htmlFor="gallons"
+                  className="font-inter text-[11px] font-medium uppercase tracking-wider text-zinc-500"
+                >
+                  Gallons
+                </label>
+                <input
+                  id="gallons"
                   inputMode="decimal"
-                  value={amount}
-                  onChange={(e) => setAmount(e.target.value)}
-                  className="h-11 pl-7 font-mono text-lg tracking-tight"
+                  value={gallons}
+                  onChange={(e) => setGallons(e.target.value)}
+                  className="h-12 w-full rounded-lg border border-zinc-200 bg-white px-4 font-mono text-[18px] text-zinc-900 outline-none transition-colors focus:border-emerald-600 focus:ring-2 focus:ring-emerald-600/20"
                 />
               </div>
-            </div>
 
-            <div className="space-y-1.5">
-              <Label htmlFor="gallons">How many gallons?</Label>
-              <Input
-                id="gallons"
-                inputMode="decimal"
-                value={gallons}
-                onChange={(e) => setGallons(e.target.value)}
-                className="h-11 font-mono text-lg tracking-tight"
-              />
-            </div>
+              <div className="flex items-center justify-between rounded-lg border border-zinc-200 bg-zinc-50 p-3">
+                <span className="font-inter text-[11px] font-medium uppercase tracking-wider text-zinc-500">
+                  Implied price
+                </span>
+                <span className="font-mono text-[20px] text-zinc-900">
+                  {impliedPrice !== null ? `$${impliedPrice.toFixed(2)}/gal` : "—"}
+                </span>
+              </div>
 
-            <div className="flex items-center justify-between rounded-lg bg-muted/60 px-3 py-2 text-sm">
-              <span className="text-muted-foreground">Implied price</span>
-              <span className="font-mono text-base font-semibold tabular-nums text-foreground">
-                {impliedPrice !== null ? `$${impliedPrice.toFixed(2)}/gal` : "—"}
-              </span>
+              <button
+                disabled={!canSubmit}
+                onClick={handleSubmit}
+                className="inline-flex h-11 w-full items-center justify-center rounded-lg bg-emerald-600 text-[15px] font-medium text-white transition-colors hover:bg-emerald-700 disabled:opacity-50"
+              >
+                {!authenticated ? "Sign in to submit" : "Submit report"}
+              </button>
+              <button
+                type="button"
+                onClick={onClose}
+                className="block w-full text-center text-[13px] text-zinc-500 hover:text-zinc-900"
+              >
+                Cancel
+              </button>
             </div>
-
-            <Button
-              className="h-11 w-full bg-emerald-600 text-white hover:bg-emerald-700"
-              disabled={!canSubmit}
-              onClick={handleSubmit}
-            >
-              {!authenticated ? "Sign in to submit" : "Submit"}
-            </Button>
-          </div>
+          </>
         )}
 
         {(stage === "verifying" || stage === "settling") && (
-          <div className="flex flex-col items-center gap-2 py-10">
-            <div className="h-8 w-8 animate-spin rounded-full border-2 border-muted border-t-emerald-600" />
-            <p className="text-sm text-muted-foreground">
-              {stage === "verifying" ? "Verifying..." : "Settling on Arc..."}
-            </p>
-          </div>
+          <LoadingState stage={stage} />
         )}
 
-        {stage === "delivered" && result && (
+        {isSuccess && (
           <>
-            <div className="flex flex-col items-center gap-4 py-8 text-center">
-              <p className="font-mono text-[11px] uppercase tracking-[0.12em] text-muted-foreground">
+            <div className="flex flex-col items-center px-4 pb-4 pt-2 text-center">
+              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-600 text-white">
+                <Check className="h-5 w-5" strokeWidth={2.5} />
+              </div>
+              <h2 className="mt-4 text-[20px] font-medium text-zinc-900">
                 Cashback delivered
+              </h2>
+              <div className="mt-5">
+                <CashbackCounter value={result.payoutAmountUsdc} />
+              </div>
+              <p className="mt-6 font-inter text-[11px] font-medium uppercase tracking-wider text-zinc-500">
+                Transaction
               </p>
-              <CashbackCounter value={result.payoutAmountUsdc} />
               <a
                 href={`${ARC_EXPLORER_TX}/${result.payoutTxHash}`}
                 target="_blank"
                 rel="noreferrer"
-                className="inline-flex items-center gap-1.5 break-all font-mono text-xs text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+                className="mt-2 inline-flex items-center gap-1.5 rounded-md border border-zinc-200 bg-zinc-50 px-3 py-2 font-mono text-[13px] text-zinc-700 hover:text-zinc-900"
               >
                 {result.payoutTxHash.slice(0, 10)}…{result.payoutTxHash.slice(-8)}
-                <ExternalLink className="h-3 w-3" />
+                <ExternalLink className="h-3.5 w-3.5" />
               </a>
             </div>
             <AutoCloseBar durationMs={AUTO_CLOSE_MS} />
@@ -251,12 +301,15 @@ export function ReportDialog({
 
         {stage === "error" && (
           <div className="space-y-3 py-4">
-            <p className="text-sm text-destructive">
+            <p className="text-[14px] text-red-600">
               {errorMsg ?? "Something went wrong."}
             </p>
-            <Button variant="outline" className="w-full" onClick={() => setStage("form")}>
+            <button
+              onClick={() => setStage("form")}
+              className="inline-flex h-10 w-full items-center justify-center rounded-lg border border-zinc-200 bg-white text-[14px] font-medium text-zinc-700 hover:border-zinc-300 hover:text-zinc-900"
+            >
               Try again
-            </Button>
+            </button>
           </div>
         )}
       </DialogContent>

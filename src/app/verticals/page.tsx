@@ -2,156 +2,156 @@
 
 import Link from "next/link";
 import { ConnectButton } from "@/components/ConnectButton";
-import { Fuel, ParkingCircle, Zap } from "lucide-react";
+import { Wordmark } from "@/components/Wordmark";
 
-type SamplePoint = {
-  name: string;
-  detail: string;
-  price: string;
-  freshness: string;
-};
+type Row = { name: string; sub: string; price: string };
 
 type Vertical = {
   key: string;
   status: "live" | "preview";
-  Icon: React.ComponentType<{ className?: string }>;
   title: string;
   blurb: string;
   href?: string;
-  points: SamplePoint[];
+  rows: Row[];
 };
 
 const VERTICALS: Vertical[] = [
   {
     key: "gas",
     status: "live",
-    Icon: Fuel,
     title: "Gas",
-    blurb: "Drivers earn cashback for confirming pump prices in real time.",
+    blurb: "Live real-time USDC cashback for gas price reports.",
     href: "/",
-    points: [
-      { name: "Arco — Mission", detail: "1798 Mission St", price: "$4.97/gal", freshness: "just now" },
-      { name: "Arco — Sloat", detail: "1500 Sloat Blvd", price: "$5.09/gal", freshness: "1h ago" },
-      { name: "Valero — Geary", detail: "3550 Geary Blvd", price: "$5.19/gal", freshness: "4h ago" },
+    rows: [
+      { name: "Arco — Mission", sub: "1798 Mission St", price: "$4.97/gal" },
+      { name: "Chevron — 26th St", sub: "1500 26th St", price: "$4.92/gal" },
+      { name: "Shell — Bryant", sub: "390 Bryant St", price: "$5.39/gal" },
     ],
   },
   {
     key: "parking",
     status: "preview",
-    Icon: ParkingCircle,
     title: "Parking",
-    blurb: "Garage operators publish per-hour rates; commuters confirm them on arrival.",
-    points: [
-      { name: "Sutter Stockton Garage", detail: "330 Sutter St", price: "$3.50/hr", freshness: "12m ago" },
-      { name: "Mission Bay Lot 5", detail: "5th & Mission", price: "$4.00/hr", freshness: "3h ago" },
-      { name: "Embarcadero Center", detail: "1 Embarcadero", price: "$5.00/hr", freshness: "8h ago" },
+    blurb: "Dynamic street and lot pricing for urban parking.",
+    rows: [
+      { name: "5th & Mission Garage", sub: "833 Mission St", price: "$12/hr" },
+      { name: "SoMa Lot", sub: "888 Brannan St", price: "$8/hr" },
+      { name: "Union Square Meter", sub: "Stockton & Geary", price: "$5.50/hr" },
     ],
   },
   {
     key: "ev",
     status: "preview",
-    Icon: Zap,
     title: "EV charging",
-    blurb: "Real kWh prices, surge windows, and stall availability — confirmed by drivers.",
-    points: [
-      { name: "EVgo — SoMa", detail: "888 Brannan St", price: "$0.32/kWh", freshness: "just now" },
-      { name: "Tesla Supercharger — Octavia", detail: "45 Page St", price: "$0.41/kWh", freshness: "30m ago" },
-      { name: "ChargePoint — Marina", detail: "3850 Lyon St", price: "$0.39/kWh", freshness: "2h ago" },
+    blurb: "Per-kWh charging rates across networks.",
+    rows: [
+      { name: "EVgo — Geary", sub: "3500 Geary Blvd", price: "$0.48/kWh" },
+      { name: "ChargePoint — Embarcadero", sub: "1 Embarcadero", price: "$0.35/kWh" },
+      { name: "Tesla Supercharger — Mission", sub: "1798 Mission St", price: "$0.42/kWh" },
     ],
   },
 ];
 
+function StatusPill({ status }: { status: "live" | "preview" }) {
+  if (status === "live") {
+    return (
+      <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2 py-0.5 font-inter text-[10px] font-medium uppercase tracking-wider text-emerald-700">
+        <span className="relative flex h-1.5 w-1.5">
+          <span
+            className="gyas-dot-pulse absolute inset-0 rounded-full bg-emerald-600"
+            aria-hidden
+          />
+          <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-emerald-600" />
+        </span>
+        Live
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex rounded-full bg-zinc-100 px-2 py-0.5 font-inter text-[10px] font-medium uppercase tracking-wider text-zinc-600">
+      Coming soon
+    </span>
+  );
+}
+
+function VerticalCard({ v }: { v: Vertical }) {
+  const inner = (
+    <article className="group flex flex-col rounded-xl border border-zinc-200 bg-white p-6 transition-colors hover:border-zinc-300">
+      <div className="flex items-center justify-between gap-3">
+        <h2 className="text-[20px] font-medium text-zinc-900">{v.title}</h2>
+        <StatusPill status={v.status} />
+      </div>
+      <p className="mt-2 text-[14px] leading-relaxed text-zinc-600">{v.blurb}</p>
+
+      <div className="my-4 h-px bg-zinc-100" />
+
+      <ul className="space-y-1">
+        {v.rows.map((r) => (
+          <li
+            key={r.name}
+            className="flex items-center justify-between gap-3 py-2"
+          >
+            <div className="min-w-0">
+              <div className="truncate text-[14px] text-zinc-900">{r.name}</div>
+              <div className="text-[11px] text-zinc-500">{r.sub}</div>
+            </div>
+            <div className="font-mono text-[14px] text-zinc-900">{r.price}</div>
+          </li>
+        ))}
+      </ul>
+
+      <p className="mt-4 font-inter text-[11px] text-zinc-400">
+        Same architecture. Different commodity.
+      </p>
+    </article>
+  );
+  return v.href ? (
+    <Link href={v.href} className="block">
+      {inner}
+    </Link>
+  ) : (
+    inner
+  );
+}
+
 export default function VerticalsPage() {
   return (
     <div className="flex min-h-screen flex-col">
-      <header className="flex items-center justify-between border-b px-6 py-3">
-        <div className="flex items-center gap-6">
-          <Link href="/" className="text-lg font-semibold tracking-tight">
-            Gyas
+      <header className="sticky top-0 z-30 flex h-14 items-center justify-between border-b border-zinc-200 bg-white/95 px-6 backdrop-blur-[1px]">
+        <Link href="/">
+          <Wordmark size="sm" withMark />
+        </Link>
+        <nav className="flex items-center gap-6 text-[14px] text-zinc-700">
+          <Link href="/" className="hover:text-zinc-900">
+            Home
           </Link>
-          <nav className="hidden gap-4 text-sm text-muted-foreground sm:flex">
-            <Link href="/" className="hover:text-foreground">
-              Home
-            </Link>
-            <Link href="/map" className="hover:text-foreground">
-              Map
-            </Link>
-            <Link href="/verticals" className="font-medium text-foreground">
-              Verticals
-            </Link>
-          </nav>
-        </div>
-        <ConnectButton />
+          <Link href="/map" className="hover:text-zinc-900">
+            Map
+          </Link>
+          <Link href="/verticals" className="font-medium text-zinc-900">
+            Verticals
+          </Link>
+          <ConnectButton />
+        </nav>
       </header>
 
-      <main className="mx-auto w-full max-w-5xl flex-1 px-6 py-12">
+      <main className="mx-auto w-full max-w-[1200px] flex-1 px-6 py-16">
         <div className="mb-10">
-          <p className="font-mono text-[11px] uppercase tracking-[0.12em] text-muted-foreground">
+          <p className="font-inter text-[11px] font-medium uppercase tracking-wider text-zinc-500">
             Future verticals
           </p>
-          <h1 className="mt-2 text-3xl font-semibold tracking-tight sm:text-4xl">
+          <h1 className="mt-2 text-[32px] font-medium tracking-tight text-zinc-900 sm:text-[40px]">
             One protocol, every priced asset.
           </h1>
-          <p className="mt-2 max-w-2xl text-sm text-muted-foreground sm:text-base">
+          <p className="mt-3 max-w-[640px] text-[16px] leading-relaxed text-zinc-600">
             The same loop — agents pay for verified prices, humans earn for confirming
             them — works anywhere prices change faster than directories can keep up.
           </p>
         </div>
 
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
           {VERTICALS.map((v) => (
-            <article
-              key={v.key}
-              className="flex flex-col rounded-2xl border bg-card p-5 shadow-sm"
-            >
-              <div className="mb-3 flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-50 text-emerald-700">
-                    <v.Icon className="h-4 w-4" />
-                  </div>
-                  <h2 className="text-lg font-semibold">{v.title}</h2>
-                </div>
-                <span
-                  className={
-                    v.status === "live"
-                      ? "rounded-full bg-emerald-100 px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider text-emerald-700"
-                      : "rounded-full bg-muted px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider text-muted-foreground"
-                  }
-                >
-                  {v.status === "live" ? "Live" : "Coming soon"}
-                </span>
-              </div>
-              <p className="text-sm text-muted-foreground">{v.blurb}</p>
-
-              <ul className="mt-4 divide-y border-y">
-                {v.points.map((p) => (
-                  <li key={p.name} className="flex items-center justify-between gap-3 py-2">
-                    <div className="min-w-0">
-                      <div className="truncate text-sm font-medium">{p.name}</div>
-                      <div className="text-[11px] text-muted-foreground">
-                        {p.detail} · {p.freshness}
-                      </div>
-                    </div>
-                    <div className="font-mono text-sm font-semibold tabular-nums">
-                      {p.price}
-                    </div>
-                  </li>
-                ))}
-              </ul>
-
-              {v.href ? (
-                <Link
-                  href={v.href}
-                  className="mt-4 text-center text-xs font-medium text-emerald-700 underline-offset-4 hover:underline"
-                >
-                  Open live demo →
-                </Link>
-              ) : (
-                <span className="mt-4 text-center text-xs text-muted-foreground">
-                  Same primitives, different vertical.
-                </span>
-              )}
-            </article>
+            <VerticalCard key={v.key} v={v} />
           ))}
         </div>
       </main>
