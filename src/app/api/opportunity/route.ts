@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { createClient } from "@/lib/db/client";
 import { freshnessLabel } from "@/lib/oracle/freshness";
+import { medianPrice } from "@/lib/oracle/savings";
 
 const RADIUS_MILES = 5;
 const MIN_PER_MILE = 1.6; // ~city traffic minutes per mile
@@ -76,6 +77,20 @@ export async function GET(request: NextRequest) {
 
     const prices = candidates.map((c) => Number(c.current_price_per_gallon));
     const avg = prices.reduce((a, b) => a + b, 0) / prices.length;
+    // Baseline = median across the *entire* stations table (not just the
+    // radius-filtered candidates), so it represents "what you'd pay typically
+    // without our recommendation." Single-station case → null baseline,
+    // savings can't be recorded.
+    const allPriceRes = await client.query<{ current_price_per_gallon: string }>(
+      `SELECT current_price_per_gallon FROM stations
+         WHERE current_price_per_gallon IS NOT NULL`,
+    );
+    const baselineSource = allPriceRes.rows.map((r) =>
+      Number(r.current_price_per_gallon),
+    );
+    const baselinePrice =
+      baselineSource.length >= 2 ? medianPrice(baselineSource) : null;
+
     const cheapest = candidates.sort(
       (a, b) => Number(a.current_price_per_gallon) - Number(b.current_price_per_gallon),
     )[0];
@@ -92,6 +107,8 @@ export async function GET(request: NextRequest) {
         lng: Number(cheapest.lng),
         price: cheapestPrice,
         avgNearby: Math.round(avg * 100) / 100,
+        baselinePrice:
+          baselinePrice !== null ? Math.round(baselinePrice * 1000) / 1000 : null,
         savingsPerGallon: Math.round(savingsPerGallon * 100) / 100,
         distanceMiles: Math.round(cheapest.distanceMiles * 10) / 10,
         detourMinutes,

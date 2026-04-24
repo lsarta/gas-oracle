@@ -105,7 +105,7 @@ export function ActivitySection({ wallet }: { wallet: string }) {
             </p>
             {savings === 0 && (
               <p className="mt-2 text-[12px] leading-snug text-zinc-500">
-                Activates when route-following is enabled.
+                Activates when you take a recommended route.
               </p>
             )}
           </div>

@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { ConnectButton } from "@/components/ConnectButton";
 import { Wordmark } from "@/components/Wordmark";
@@ -13,44 +14,42 @@ type Vertical = {
   blurb: string;
   href?: string;
   rows: Row[];
+  footer: string;
 };
 
-const VERTICALS: Vertical[] = [
-  {
-    key: "gas",
-    status: "live",
-    title: "Gas",
-    blurb: "Live real-time USDC cashback for gas price reports.",
-    href: "/",
-    rows: [
-      { name: "Arco — Mission", sub: "1798 Mission St", price: "$4.97/gal" },
-      { name: "Chevron — 26th St", sub: "1500 26th St", price: "$4.92/gal" },
-      { name: "Shell — Bryant", sub: "390 Bryant St", price: "$5.39/gal" },
-    ],
-  },
-  {
-    key: "parking",
-    status: "preview",
-    title: "Parking",
-    blurb: "Dynamic street and lot pricing for urban parking.",
-    rows: [
-      { name: "5th & Mission Garage", sub: "833 Mission St", price: "$12/hr" },
-      { name: "SoMa Lot", sub: "888 Brannan St", price: "$8/hr" },
-      { name: "Union Square Meter", sub: "Stockton & Geary", price: "$5.50/hr" },
-    ],
-  },
-  {
-    key: "ev",
-    status: "preview",
-    title: "EV charging",
-    blurb: "Per-kWh charging rates across networks.",
-    rows: [
-      { name: "EVgo — Geary", sub: "3500 Geary Blvd", price: "$0.48/kWh" },
-      { name: "ChargePoint — Embarcadero", sub: "1 Embarcadero", price: "$0.35/kWh" },
-      { name: "Tesla Supercharger — Mission", sub: "1798 Mission St", price: "$0.42/kWh" },
-    ],
-  },
-];
+type ParkingLocation = {
+  id: string;
+  name: string;
+  address: string;
+  currentHourlyRate: number | null;
+};
+
+const STATIC_GAS: Vertical = {
+  key: "gas",
+  status: "live",
+  title: "Gas",
+  blurb: "Live real-time USDC cashback for gas price reports.",
+  href: "/",
+  rows: [
+    { name: "Arco — Mission", sub: "1798 Mission St", price: "$4.97/gal" },
+    { name: "Chevron — 26th St", sub: "1500 26th St", price: "$4.92/gal" },
+    { name: "Shell — Bryant", sub: "390 Bryant St", price: "$5.39/gal" },
+  ],
+  footer: "Same x402 oracle. Same Arc settlement. Different commodity.",
+};
+
+const STATIC_EV: Vertical = {
+  key: "ev",
+  status: "preview",
+  title: "EV charging",
+  blurb: "Per-kWh charging rates across networks.",
+  rows: [
+    { name: "EVgo — Geary", sub: "3500 Geary Blvd", price: "$0.48/kWh" },
+    { name: "ChargePoint — Embarcadero", sub: "1 Embarcadero", price: "$0.35/kWh" },
+    { name: "Tesla Supercharger — Mission", sub: "1798 Mission St", price: "$0.42/kWh" },
+  ],
+  footer: "Same architecture. Different commodity.",
+};
 
 function StatusPill({ status }: { status: "live" | "preview" }) {
   if (status === "live") {
@@ -76,7 +75,7 @@ function StatusPill({ status }: { status: "live" | "preview" }) {
 
 function VerticalCard({ v }: { v: Vertical }) {
   const inner = (
-    <article className="group flex flex-col rounded-xl border border-zinc-200 bg-white p-6 transition-colors hover:border-zinc-300">
+    <article className="group flex h-full flex-col rounded-xl border border-zinc-200 bg-white p-6 transition-colors hover:border-zinc-300">
       <div className="flex items-center justify-between gap-3">
         <h2 className="text-[20px] font-medium text-zinc-900">{v.title}</h2>
         <StatusPill status={v.status} />
@@ -87,10 +86,7 @@ function VerticalCard({ v }: { v: Vertical }) {
 
       <ul className="space-y-1">
         {v.rows.map((r) => (
-          <li
-            key={r.name}
-            className="flex items-center justify-between gap-3 py-2"
-          >
+          <li key={`${r.name}-${r.sub}`} className="flex items-center justify-between gap-3 py-2">
             <div className="min-w-0">
               <div className="truncate text-[14px] text-zinc-900">{r.name}</div>
               <div className="text-[11px] text-zinc-500">{r.sub}</div>
@@ -100,9 +96,7 @@ function VerticalCard({ v }: { v: Vertical }) {
         ))}
       </ul>
 
-      <p className="mt-4 font-inter text-[11px] text-zinc-400">
-        Same architecture. Different commodity.
-      </p>
+      <p className="mt-4 font-inter text-[11px] text-zinc-400">{v.footer}</p>
     </article>
   );
   return v.href ? (
@@ -114,7 +108,56 @@ function VerticalCard({ v }: { v: Vertical }) {
   );
 }
 
+function buildParkingVertical(locs: ParkingLocation[]): Vertical {
+  const top3 = locs.slice(0, 3);
+  return {
+    key: "parking",
+    status: "live",
+    title: "Parking",
+    blurb: "Real-time hourly rates across SF parking. Same oracle, fresh data.",
+    href: "/parking",
+    rows:
+      top3.length > 0
+        ? top3.map((l) => ({
+            name: l.name,
+            sub: l.address.replace(", SF", ""),
+            price:
+              l.currentHourlyRate !== null
+                ? `$${l.currentHourlyRate.toFixed(2)}/hr`
+                : "—",
+          }))
+        : [
+            { name: "5th & Mission Garage", sub: "833 Mission St", price: "$12.00/hr" },
+            { name: "SoMa Lot", sub: "475 5th St", price: "$8.00/hr" },
+            { name: "Mission St Meter", sub: "2400 Mission St", price: "$5.50/hr" },
+          ],
+    footer: "Same x402 oracle. Same Arc settlement. Different commodity.",
+  };
+}
+
 export default function VerticalsPage() {
+  const [parking, setParking] = useState<ParkingLocation[]>([]);
+
+  useEffect(() => {
+    let aborted = false;
+    fetch("/api/parking/locations", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((j) => {
+        if (aborted) return;
+        setParking(
+          (j.locations as ParkingLocation[]).slice().sort((a, b) =>
+            (a.currentHourlyRate ?? Infinity) - (b.currentHourlyRate ?? Infinity),
+          ),
+        );
+      })
+      .catch(() => {});
+    return () => {
+      aborted = true;
+    };
+  }, []);
+
+  const verticals: Vertical[] = [STATIC_GAS, buildParkingVertical(parking), STATIC_EV];
+
   return (
     <div className="flex min-h-screen flex-col">
       <header className="sticky top-0 z-30 flex h-14 items-center justify-between border-b border-zinc-200 bg-white/95 px-6 backdrop-blur-[1px]">
@@ -150,7 +193,7 @@ export default function VerticalsPage() {
         </div>
 
         <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
-          {VERTICALS.map((v) => (
+          {verticals.map((v) => (
             <VerticalCard key={v.key} v={v} />
           ))}
         </div>

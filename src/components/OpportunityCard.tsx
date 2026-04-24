@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { toast } from "sonner";
 
 type Opportunity = {
   stationId: string;
@@ -10,6 +11,7 @@ type Opportunity = {
   lng: number;
   price: number;
   avgNearby: number;
+  baselinePrice: number | null;
   savingsPerGallon: number;
   distanceMiles: number;
   detourMinutes: number;
@@ -26,6 +28,7 @@ const FALLBACK: Opportunity = {
   lng: -122.4198,
   price: 4.97,
   avgNearby: 5.4,
+  baselinePrice: 5.4,
   savingsPerGallon: 0.43,
   distanceMiles: 1.5,
   detourMinutes: 4,
@@ -46,7 +49,6 @@ function staticMapUrl(opp: Opportunity, origin: Origin | null): string {
     );
   }
   const overlayStr = overlays.length ? `${overlays.join(",")}/` : "";
-  // Center on destination at fixed zoom; we overlay our own pulsing pin via DOM.
   return `https://api.mapbox.com/styles/v1/mapbox/light-v11/static/${overlayStr}${opp.lng},${opp.lat},13,0/600x180@2x?access_token=${token}&attribution=false&logo=false`;
 }
 
@@ -78,6 +80,7 @@ function encodeNum(num: number): string {
 export function OpportunityCard({ wallet }: { wallet?: string }) {
   const [opp, setOpp] = useState<Opportunity>(FALLBACK);
   const [origin, setOrigin] = useState<Origin | null>(null);
+  const [taking, setTaking] = useState(false);
 
   useEffect(() => {
     let aborted = false;
@@ -97,10 +100,50 @@ export function OpportunityCard({ wallet }: { wallet?: string }) {
     };
   }, [wallet]);
 
-  const directionsUrl = `https://www.google.com/maps/dir/?api=1&destination=${opp.lat},${opp.lng}`;
   const showMap = !!(origin?.usedHome && process.env.NEXT_PUBLIC_MAPBOX_TOKEN);
   const mapUrl = showMap ? staticMapUrl(opp, origin) : "";
   const showSavings = opp.savingsPerGallon >= 0.05;
+
+  function directionsUrl(): string {
+    const dest = `${opp.lat},${opp.lng}`;
+    if (origin?.usedHome) {
+      return `https://www.google.com/maps/dir/?api=1&origin=${origin.lat},${origin.lng}&destination=${dest}`;
+    }
+    return `https://www.google.com/maps/dir/?api=1&destination=${dest}`;
+  }
+
+  async function handleGetDirections(e: React.MouseEvent<HTMLAnchorElement>) {
+    // Open directions immediately so the click isn't dropped if the take
+    // POST is slow. The take fires in parallel — failure is silently ignored
+    // (best-effort tracking, not a blocker for the user action).
+    if (!wallet || !opp.stationId || !opp.baselinePrice) return;
+    if (taking) return;
+    setTaking(true);
+    try {
+      const res = await fetch("/api/savings/take", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          userWallet: wallet,
+          stationId: opp.stationId,
+          recommendedPrice: opp.price,
+          baselinePrice: opp.baselinePrice,
+        }),
+      });
+      if (res.ok) {
+        const j = await res.json();
+        const saved = Number(j.estimatedSavings ?? 0);
+        if (saved > 0) {
+          toast.success(`Saved $${saved.toFixed(2)} — recorded to your earnings`);
+        }
+      }
+    } catch {
+      /* tracking is best-effort */
+    } finally {
+      setTaking(false);
+    }
+    void e;
+  }
 
   return (
     <section className="mx-auto w-full max-w-[560px]">
@@ -137,7 +180,6 @@ export function OpportunityCard({ wallet }: { wallet?: string }) {
               className="h-full w-full object-cover"
               loading="lazy"
             />
-            {/* Pulsing destination pin overlay, centered on map */}
             <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
               <div className="relative h-3 w-3">
                 <span
@@ -155,9 +197,10 @@ export function OpportunityCard({ wallet }: { wallet?: string }) {
 
         <div className="mt-6 flex flex-col gap-2">
           <a
-            href={directionsUrl}
+            href={directionsUrl()}
             target="_blank"
             rel="noreferrer"
+            onClick={handleGetDirections}
             className="inline-flex h-11 items-center justify-center rounded-lg bg-emerald-600 text-[15px] font-medium text-white transition-colors hover:bg-emerald-700"
           >
             Get directions
