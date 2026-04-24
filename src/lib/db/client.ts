@@ -33,6 +33,11 @@ export type User = {
   total_saved_usd: number;
   home_lat: number | null;
   home_lng: number | null;
+  work_lat: number | null;
+  work_lng: number | null;
+  hourly_value_usd: number;
+  avg_mpg: number;
+  typical_fillup_gallons: number;
   created_at: Date;
 };
 

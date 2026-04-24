@@ -8,7 +8,8 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { ChevronDown, Coins, LogOut, Wallet } from "lucide-react";
+import Link from "next/link";
+import { ChevronDown, Coins, LogOut, Settings as SettingsIcon, Wallet } from "lucide-react";
 
 function truncate(addr?: string) {
   if (!addr) return "";
@@ -77,6 +78,17 @@ export function ConnectButton() {
           <DropdownMenuItem className="flex items-center gap-2 rounded-md px-3 py-2 text-[14px] text-zinc-900 hover:bg-zinc-50 focus:bg-zinc-50">
             <Coins className="h-3.5 w-3.5 text-zinc-500" />
             Earnings
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            render={
+              <Link
+                href="/settings"
+                className="flex items-center gap-2 rounded-md px-3 py-2 text-[14px] text-zinc-900 hover:bg-zinc-50 focus:bg-zinc-50"
+              />
+            }
+          >
+            <SettingsIcon className="h-3.5 w-3.5 text-zinc-500" />
+            Settings
           </DropdownMenuItem>
           <div className="my-1 h-px bg-zinc-100" />
           <DropdownMenuItem

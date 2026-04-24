@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { Info } from "lucide-react";
 import { ReportDialog } from "@/components/ReportDialog";
 
 type Me = {
@@ -97,15 +98,31 @@ export function ActivitySection({ wallet }: { wallet: string }) {
 
         <div className="mt-3 grid grid-cols-2 gap-4">
           <div className="rounded-xl border border-zinc-200 bg-white p-5">
-            <p className="font-inter text-[11px] font-medium uppercase tracking-wider text-zinc-500">
-              Lifetime savings
-            </p>
-            <p className="mt-2 font-mono text-[28px] font-medium leading-none tracking-tight text-zinc-900">
+            <div className="flex items-center gap-1">
+              <p className="font-inter text-[11px] font-medium uppercase tracking-wider text-zinc-500">
+                Lifetime savings
+              </p>
+              <span
+                className="group relative inline-flex"
+                aria-label="Net savings after detour time and fuel cost."
+              >
+                <Info className="h-3 w-3 text-zinc-400" />
+                <span
+                  role="tooltip"
+                  className="pointer-events-none absolute left-1/2 top-full z-10 mt-1 w-52 -translate-x-1/2 rounded-md border border-zinc-200 bg-white p-2 text-[11px] text-zinc-700 opacity-0 shadow-sm transition-opacity group-hover:opacity-100"
+                >
+                  Net savings after detour time and fuel cost.
+                </span>
+              </span>
+            </div>
+            <p
+              className={`mt-2 font-mono text-[28px] font-medium leading-none tracking-tight ${savings > 0 ? "text-emerald-600" : "text-zinc-900"}`}
+            >
               {savings > 0 ? `$${savings.toFixed(2)}` : "—"}
             </p>
             {savings === 0 && (
               <p className="mt-2 text-[12px] leading-snug text-zinc-500">
-                Activates when you take a recommended route.
+                Activates when you take a recommended detour.
               </p>
             )}
           </div>
