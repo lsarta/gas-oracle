@@ -206,12 +206,17 @@ export function RouteView({ stationId }: { stationId: string }) {
     const timeoutId = setTimeout(() => {
       mapRef.current?.resize();
       const c = mapRef.current?.getCanvas();
-      console.log(
-        "[RouteView] map canvas size after init:",
-        c?.width,
-        c?.height,
-      );
-    }, 50);
+      const rect = containerRef.current?.getBoundingClientRect();
+      console.log("[RouteView] diag", {
+        viewport: `${window.innerWidth}x${window.innerHeight}`,
+        dpr: window.devicePixelRatio,
+        canvasBuffer: `${c?.width}x${c?.height}`,
+        containerCSS: rect ? `${Math.round(rect.width)}x${Math.round(rect.height)}` : null,
+        containerTop: rect ? Math.round(rect.top) : null,
+        bodyHeight: document.body.getBoundingClientRect().height,
+        htmlHeight: document.documentElement.getBoundingClientRect().height,
+      });
+    }, 100);
 
     return () => {
       cancelAnimationFrame(raf1);
