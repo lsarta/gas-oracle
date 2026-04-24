@@ -1,105 +1,114 @@
 import { NextRequest } from "next/server";
 import { createClient } from "@/lib/db/client";
-import { freshnessLabel } from "@/lib/oracle/freshness";
+import {
+  recommendStation,
+  type Recommendation,
+  type Station as RecStation,
+  type UserProfile,
+} from "@/lib/oracle/recommend";
 
-const RADIUS_MILES = 5;
-const MIN_PER_MILE = 1.6; // ~city traffic minutes per mile
+type Reason = "set_locations" | "no_savings" | "no_candidates" | null;
+type CachePayload = {
+  recommendation: Recommendation | null;
+  reason: Reason;
+};
 
-function haversineMiles(
-  lat1: number,
-  lng1: number,
-  lat2: number,
-  lng2: number,
-): number {
-  const R = 3958.7613;
-  const toRad = (d: number) => (d * Math.PI) / 180;
-  const dLat = toRad(lat2 - lat1);
-  const dLng = toRad(lng2 - lng1);
-  const a =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
-  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-}
+const PER_USER_TTL_MS = 60_000;
+const userCache = new Map<string, { payload: CachePayload; expiresAt: number }>();
+
+const FALLBACK_HOURLY = 30;
+const FALLBACK_MPG = 25;
+const FALLBACK_FILLUP = 12;
 
 export async function GET(request: NextRequest) {
-  const sp = request.nextUrl.searchParams;
-  const wallet = sp.get("wallet");
+  const wallet = request.nextUrl.searchParams.get("wallet");
+  const cacheKey = wallet ?? "__anonymous__";
+  const now = Date.now();
+  const cached = userCache.get(cacheKey);
+  if (cached && cached.expiresAt > now) {
+    return Response.json(cached.payload);
+  }
 
   const client = createClient();
   await client.connect();
-
   try {
-    let originLat: number | null = null;
-    let originLng: number | null = null;
-    let usedHome = false;
-
+    let user: UserProfile | null = null;
     if (wallet && /^0x[a-fA-F0-9]{40}$/.test(wallet)) {
-      const u = await client.query(
-        `SELECT home_lat, home_lng FROM users WHERE wallet_address = $1`,
+      const u = await client.query<{
+        home_lat: number | null;
+        home_lng: number | null;
+        work_lat: number | null;
+        work_lng: number | null;
+        hourly_value_usd: string | null;
+        avg_mpg: string | null;
+        typical_fillup_gallons: string | null;
+      }>(
+        `SELECT home_lat, home_lng, work_lat, work_lng,
+                hourly_value_usd, avg_mpg, typical_fillup_gallons
+           FROM users WHERE wallet_address = $1`,
         [wallet],
       );
-      if (u.rows.length && u.rows[0].home_lat !== null && u.rows[0].home_lng !== null) {
-        originLat = Number(u.rows[0].home_lat);
-        originLng = Number(u.rows[0].home_lng);
-        usedHome = true;
+      if (u.rows.length) {
+        const r = u.rows[0];
+        user = {
+          homeLat: r.home_lat,
+          homeLng: r.home_lng,
+          workLat: r.work_lat,
+          workLng: r.work_lng,
+          hourlyValueUsd:
+            r.hourly_value_usd !== null ? Number(r.hourly_value_usd) : FALLBACK_HOURLY,
+          avgMpg: r.avg_mpg !== null ? Number(r.avg_mpg) : FALLBACK_MPG,
+          typicalFillupGallons:
+            r.typical_fillup_gallons !== null
+              ? Number(r.typical_fillup_gallons)
+              : FALLBACK_FILLUP,
+        };
       }
     }
-    if (originLat === null || originLng === null) {
-      // SF fallback (Mission district-ish — close to the demo seed cluster).
-      originLat = 37.7693;
-      originLng = -122.4198;
+
+    if (!user || user.homeLat === null || user.homeLng === null) {
+      const payload: CachePayload = { recommendation: null, reason: "set_locations" };
+      userCache.set(cacheKey, { payload, expiresAt: now + PER_USER_TTL_MS });
+      return Response.json(payload);
     }
 
-    const { rows } = await client.query(
-      `SELECT id, name, address, lat, lng, current_price_per_gallon, last_priced_at
-         FROM stations WHERE current_price_per_gallon IS NOT NULL`,
-    );
-    type Row = {
+    const stationsRes = await client.query<{
       id: string;
       name: string;
       address: string;
       lat: number;
       lng: number;
-      current_price_per_gallon: string | number;
-      last_priced_at: Date | null;
-    };
-    const candidates = (rows as Row[])
-      .map((r) => ({
-        ...r,
-        distanceMiles: haversineMiles(originLat!, originLng!, Number(r.lat), Number(r.lng)),
-      }))
-      .filter((r) => r.distanceMiles <= RADIUS_MILES);
+      current_price_per_gallon: string;
+    }>(
+      `SELECT id, name, address, lat, lng, current_price_per_gallon
+         FROM stations
+         WHERE current_price_per_gallon IS NOT NULL`,
+    );
+    const candidateStations: RecStation[] = stationsRes.rows.map((r) => ({
+      id: r.id,
+      name: r.name,
+      address: r.address,
+      lat: Number(r.lat),
+      lng: Number(r.lng),
+      price: Number(r.current_price_per_gallon),
+    }));
 
-    if (candidates.length === 0) {
-      return Response.json({ opportunity: null, usedHome });
+    if (candidateStations.length === 0) {
+      const payload: CachePayload = { recommendation: null, reason: "no_candidates" };
+      userCache.set(cacheKey, { payload, expiresAt: now + PER_USER_TTL_MS });
+      return Response.json(payload);
     }
 
-    const prices = candidates.map((c) => Number(c.current_price_per_gallon));
-    const avg = prices.reduce((a, b) => a + b, 0) / prices.length;
-    const cheapest = candidates.sort(
-      (a, b) => Number(a.current_price_per_gallon) - Number(b.current_price_per_gallon),
-    )[0];
-    const cheapestPrice = Number(cheapest.current_price_per_gallon);
-    const savingsPerGallon = Math.max(0, avg - cheapestPrice);
-    const detourMinutes = Math.round(cheapest.distanceMiles * MIN_PER_MILE);
+    const rec = await recommendStation(user, candidateStations);
+    const payload: CachePayload =
+      rec === null
+        ? { recommendation: null, reason: "no_candidates" }
+        : rec.worthDetouring
+          ? { recommendation: rec, reason: null }
+          : { recommendation: rec, reason: "no_savings" };
 
-    return Response.json({
-      opportunity: {
-        stationId: cheapest.id,
-        name: cheapest.name,
-        address: cheapest.address,
-        lat: Number(cheapest.lat),
-        lng: Number(cheapest.lng),
-        price: cheapestPrice,
-        avgNearby: Math.round(avg * 100) / 100,
-        savingsPerGallon: Math.round(savingsPerGallon * 100) / 100,
-        distanceMiles: Math.round(cheapest.distanceMiles * 10) / 10,
-        detourMinutes,
-        freshness: freshnessLabel(cheapest.last_priced_at),
-        lastPricedAt: cheapest.last_priced_at?.toISOString() ?? null,
-      },
-      origin: { lat: originLat, lng: originLng, usedHome },
-    });
+    userCache.set(cacheKey, { payload, expiresAt: now + PER_USER_TTL_MS });
+    return Response.json(payload);
   } finally {
     await client.end();
   }

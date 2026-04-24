@@ -4,7 +4,10 @@ import { createClient } from "@/lib/db/client";
 export async function GET(request: NextRequest) {
   const wallet = request.nextUrl.searchParams.get("wallet");
   if (!wallet || !/^0x[a-fA-F0-9]{40}$/.test(wallet)) {
-    return Response.json({ error: "wallet query param required (0x address)" }, { status: 400 });
+    return Response.json(
+      { error: "wallet query param required (0x address)" },
+      { status: 400 },
+    );
   }
 
   const client = createClient();
@@ -12,7 +15,10 @@ export async function GET(request: NextRequest) {
   try {
     const { rows } = await client.query(
       `SELECT id, privy_user_id, email, wallet_address,
-              total_earned_usdc, total_saved_usd, home_lat, home_lng, created_at
+              total_earned_usdc, total_saved_usd,
+              home_lat, home_lng, work_lat, work_lng,
+              hourly_value_usd, avg_mpg, typical_fillup_gallons,
+              created_at
          FROM users WHERE wallet_address = $1`,
       [wallet],
     );
@@ -36,6 +42,13 @@ export async function GET(request: NextRequest) {
         totalSavedUsd: Number(r.total_saved_usd),
         homeLat: r.home_lat === null ? null : Number(r.home_lat),
         homeLng: r.home_lng === null ? null : Number(r.home_lng),
+        workLat: r.work_lat === null ? null : Number(r.work_lat),
+        workLng: r.work_lng === null ? null : Number(r.work_lng),
+        hourlyValueUsd:
+          r.hourly_value_usd === null ? null : Number(r.hourly_value_usd),
+        avgMpg: r.avg_mpg === null ? null : Number(r.avg_mpg),
+        typicalFillupGallons:
+          r.typical_fillup_gallons === null ? null : Number(r.typical_fillup_gallons),
         createdAt: (r.created_at as Date).toISOString(),
         reportsCount: reportsCountRes.rows[0].n as number,
       },

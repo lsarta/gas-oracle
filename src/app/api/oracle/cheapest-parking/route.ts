@@ -1,17 +1,17 @@
 import { createOracleHandler, type CheapestRow } from "@/lib/oracle/oracle-handler";
 
 export const GET = createOracleHandler({
-  table: "stations",
-  priceColumn: "current_price_per_gallon",
-  vertical: "gas",
-  description: "Cheapest gas station within radius",
+  table: "parking_locations",
+  priceColumn: "current_hourly_rate",
+  vertical: "parking",
+  description: "Cheapest parking location within radius",
   formatResponse: (row: CheapestRow, distanceMiles: number) => ({
-    station: {
+    location: {
       name: row.name,
       address: row.address,
       lat: row.lat,
       lng: row.lng,
-      price: row.price,
+      hourlyRate: row.price,
       lastUpdated: row.lastPricedAt ? row.lastPricedAt.toISOString() : null,
     },
     distanceMiles,
