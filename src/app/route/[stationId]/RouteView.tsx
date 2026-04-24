@@ -1,5 +1,9 @@
 "use client";
 
+// Tailwind safelist (prevents v4 scanner miss on this page's md: variants):
+// md:left-auto md:right-0 md:top-0 md:bottom-0 md:max-h-none md:w-[400px]
+// md:rounded-none md:border-l md:border-t-0 md:translate-x-0 md:translate-x-full
+
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -59,6 +63,17 @@ function CountUp({ value }: { value: number }) {
       {display}
     </motion.span>
   );
+}
+
+// IMPORTANT: These class strings must stay on a single line each.
+// Tailwind v4's scanner misses responsive variants (md:*) when they sit
+// in a multi-line template literal inside JSX. Keep them flat.
+const ASIDE_BASE_CLASSES = "absolute z-20 transform border-zinc-200 bg-white shadow-lg transition-transform duration-300 ease-out left-0 right-0 bottom-0 max-h-[60vh] overflow-y-auto rounded-t-2xl border-t md:left-auto md:right-0 md:top-0 md:bottom-0 md:max-h-none md:w-[400px] md:rounded-none md:border-l md:border-t-0";
+const ASIDE_IN = "translate-y-0 md:translate-x-0";
+const ASIDE_OUT = "translate-y-full md:translate-x-full";
+
+function asidePanelClasses(panelIn: boolean): string {
+  return `${ASIDE_BASE_CLASSES} ${panelIn ? ASIDE_IN : ASIDE_OUT}`;
 }
 
 function buildStationMarker(): HTMLElement {
@@ -186,10 +201,22 @@ export function RouteView({ stationId }: { stationId: string }) {
     const raf2 = requestAnimationFrame(() =>
       requestAnimationFrame(() => mapRef.current?.resize()),
     );
+    // Third belt: a 50ms deferred resize after layout has settled, plus a
+    // canvas-size log so we can inspect real-world dimensions in prod.
+    const timeoutId = setTimeout(() => {
+      mapRef.current?.resize();
+      const c = mapRef.current?.getCanvas();
+      console.log(
+        "[RouteView] map canvas size after init:",
+        c?.width,
+        c?.height,
+      );
+    }, 50);
 
     return () => {
       cancelAnimationFrame(raf1);
       cancelAnimationFrame(raf2);
+      clearTimeout(timeoutId);
       ro.disconnect();
       mapRef.current?.remove();
       mapRef.current = null;
@@ -362,11 +389,7 @@ export function RouteView({ stationId }: { stationId: string }) {
         {/* Side panel — slides in from right on desktop, up from bottom on mobile */}
         {rec && (
           <aside
-            className={`absolute z-20 transform border-zinc-200 bg-white shadow-lg transition-transform duration-300 ease-out
-              left-0 right-0 bottom-0 max-h-[60vh] overflow-y-auto rounded-t-2xl border-t
-              ${panelIn ? "translate-y-0" : "translate-y-full"}
-              md:left-auto md:right-0 md:top-0 md:bottom-0 md:max-h-none md:w-[400px] md:rounded-none md:border-l md:border-t-0
-              ${panelIn ? "md:translate-x-0" : "md:translate-x-full"}`}
+            className={asidePanelClasses(panelIn)}
           >
             <div className="md:sticky md:top-0 px-6 pt-5">
               <div className="mx-auto mb-3 h-1 w-9 rounded-full bg-zinc-300 md:hidden" />
