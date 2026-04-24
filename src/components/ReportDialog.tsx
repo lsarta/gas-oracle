@@ -19,11 +19,21 @@ import {
 } from "@/components/ui/dialog";
 import { Check, ExternalLink, Loader2 } from "lucide-react";
 
-type Stage = "form" | "verifying" | "settling" | "delivered" | "error";
+type Stage =
+  | "form"
+  | "review-stake"
+  | "verifying"
+  | "settling"
+  | "delivered"
+  | "staked"
+  | "error";
 
 type StationLite = {
   id: string;
   name: string;
+  activeBounty: number;
+  requiresStake: boolean;
+  stakeAmount: number;
 };
 
 const ARC_EXPLORER_TX = "https://testnet.arcscan.app/tx";
@@ -116,10 +126,25 @@ export function ReportDialog({
       .then((r) => r.json())
       .then((j) => {
         if (aborted) return;
-        const s = (j.stations as Array<{ id: string; name: string }>).find(
-          (x) => x.id === stationId,
+        type RichStation = {
+          id: string;
+          name: string;
+          activeBounty?: number;
+          requiresStake?: boolean;
+          stakeAmount?: number;
+        };
+        const s = (j.stations as RichStation[]).find((x) => x.id === stationId);
+        setStation(
+          s
+            ? {
+                id: s.id,
+                name: s.name,
+                activeBounty: Number(s.activeBounty ?? 0),
+                requiresStake: Boolean(s.requiresStake),
+                stakeAmount: Number(s.stakeAmount ?? 0),
+              }
+            : null,
         );
-        setStation(s ? { id: s.id, name: s.name } : null);
       })
       .catch(() => {});
     return () => {
@@ -140,12 +165,21 @@ export function ReportDialog({
     authenticated && !!wallet && impliedPrice !== null && stage === "form";
 
   useEffect(() => {
-    if (stage !== "delivered") return;
+    if (stage !== "delivered" && stage !== "staked") return;
     const id = setTimeout(onClose, AUTO_CLOSE_MS);
     return () => clearTimeout(id);
   }, [stage, onClose]);
 
-  async function handleSubmit() {
+  async function handleFormSubmit() {
+    if (!stationId || !wallet || impliedPrice === null) return;
+    if (station?.requiresStake) {
+      setStage("review-stake");
+      return;
+    }
+    await submitUnstakedReport();
+  }
+
+  async function submitUnstakedReport() {
     if (!stationId || !wallet || impliedPrice === null) return;
     setErrorMsg(null);
     setStage("verifying");
@@ -177,6 +211,35 @@ export function ReportDialog({
         wasOutlier: Boolean(json.wasOutlier),
       });
       setStage("delivered");
+    } catch (err) {
+      setErrorMsg(err instanceof Error ? err.message : String(err));
+      setStage("error");
+    }
+  }
+
+  async function submitStakedReport() {
+    if (!stationId || !wallet || impliedPrice === null || !station) return;
+    setErrorMsg(null);
+    setStage("verifying");
+    try {
+      const res = await fetch("/api/stakes/submit", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          stationId,
+          userWallet: wallet,
+          transactionAmountUsd: amountNum,
+          gallons: gallonsNum,
+          stakeAmount: station.stakeAmount,
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        setErrorMsg(json.error || `HTTP ${res.status}`);
+        setStage("error");
+        return;
+      }
+      setStage("staked");
     } catch (err) {
       setErrorMsg(err instanceof Error ? err.message : String(err));
       setStage("error");
@@ -254,10 +317,14 @@ export function ReportDialog({
 
               <button
                 disabled={!canSubmit}
-                onClick={handleSubmit}
+                onClick={handleFormSubmit}
                 className="inline-flex h-11 w-full items-center justify-center rounded-lg bg-emerald-600 text-[15px] font-medium text-white transition-colors hover:bg-emerald-700 disabled:opacity-50"
               >
-                {!authenticated ? "Sign in to submit" : "Submit report"}
+                {!authenticated
+                  ? "Sign in to submit"
+                  : station?.requiresStake
+                    ? `Continue — $${station.stakeAmount.toFixed(2)} stake required`
+                    : "Submit report"}
               </button>
               <button
                 type="button"
@@ -268,6 +335,99 @@ export function ReportDialog({
               </button>
             </div>
           </>
+        )}
+
+        {stage === "review-stake" && station && impliedPrice !== null && (
+          <div className="space-y-4 px-1 pt-2">
+            <div>
+              <p className="text-[18px] font-medium text-zinc-900">
+                Review your stake
+              </p>
+              <p className="mt-1 text-[13px] text-zinc-500">
+                {station.name}
+              </p>
+            </div>
+            <div className="space-y-2 rounded-lg border border-zinc-200 bg-zinc-50 p-4">
+              <div className="flex items-center justify-between">
+                <span className="font-inter text-[11px] font-medium uppercase tracking-wider text-zinc-500">
+                  Amount
+                </span>
+                <span className="font-mono text-[14px] text-zinc-900">
+                  ${amountNum.toFixed(2)}
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="font-inter text-[11px] font-medium uppercase tracking-wider text-zinc-500">
+                  Gallons
+                </span>
+                <span className="font-mono text-[14px] text-zinc-900">
+                  {gallonsNum.toFixed(1)}
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="font-inter text-[11px] font-medium uppercase tracking-wider text-zinc-500">
+                  Implied price
+                </span>
+                <span className="font-mono text-[14px] text-zinc-900">
+                  ${impliedPrice.toFixed(2)}/gal
+                </span>
+              </div>
+            </div>
+            <div className="space-y-2 rounded-lg border border-emerald-200 bg-emerald-50 p-4">
+              <div className="flex items-center justify-between">
+                <span className="font-inter text-[11px] font-medium uppercase tracking-wider text-emerald-700">
+                  Stake required
+                </span>
+                <span className="font-mono text-[18px] font-medium text-zinc-900">
+                  ${station.stakeAmount.toFixed(2)} USDC
+                </span>
+              </div>
+              <p className="text-[12px] leading-relaxed text-emerald-900">
+                If your price matches consensus after 2 more reports, you get back
+                ${station.stakeAmount.toFixed(2)} stake + $
+                {station.activeBounty.toFixed(2)} bounty = $
+                {(station.stakeAmount + station.activeBounty).toFixed(2)} USDC.
+              </p>
+              <p className="text-[12px] leading-relaxed text-amber-800">
+                If your price is an outlier, the ${station.stakeAmount.toFixed(2)}
+                {" "}
+                stake is slashed.
+              </p>
+            </div>
+            <div className="flex flex-col gap-2 pt-2">
+              <button
+                onClick={submitStakedReport}
+                className="inline-flex h-11 w-full items-center justify-center rounded-lg bg-emerald-600 text-[15px] font-medium text-white transition-colors hover:bg-emerald-700"
+              >
+                Stake and submit
+              </button>
+              <button
+                type="button"
+                onClick={() => setStage("form")}
+                className="block w-full text-center text-[13px] text-zinc-500 hover:text-zinc-900"
+              >
+                Back
+              </button>
+            </div>
+          </div>
+        )}
+
+        {stage === "staked" && station && (
+          <div className="flex flex-col items-center gap-3 px-4 py-8 text-center">
+            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-600 text-white">
+              <Check className="h-5 w-5" strokeWidth={2.5} />
+            </div>
+            <h2 className="text-[20px] font-medium text-zinc-900">Report staked</h2>
+            <p className="font-mono text-[14px] text-zinc-900">
+              ${station.stakeAmount.toFixed(2)} staked · $
+              {station.activeBounty.toFixed(2)} bounty pending
+            </p>
+            <p className="max-w-xs text-[13px] leading-relaxed text-zinc-500">
+              Your stake is pending. We&apos;ll resolve it after 2 more reports on
+              this station.
+            </p>
+            <AutoCloseBar durationMs={AUTO_CLOSE_MS} />
+          </div>
         )}
 
         {(stage === "verifying" || stage === "settling") && (

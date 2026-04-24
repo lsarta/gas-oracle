@@ -10,6 +10,7 @@ import {
   isOutlier,
   type ReportRow,
 } from "@/lib/oracle/consensus";
+import { resolvePendingStakes } from "@/lib/oracle/resolve-stakes";
 import { sendUsdcToUser } from "@/lib/circle/payout";
 
 const BodySchema = z.object({
@@ -158,6 +159,16 @@ export async function POST(request: NextRequest) {
       );
     } catch (err) {
       payoutError = err instanceof Error ? err.message : String(err);
+    }
+
+    // Try to resolve any pending stakes on this station, now that we've
+    // added another report. Non-fatal — failures are logged but don't
+    // block the response.
+    try {
+      const n = await resolvePendingStakes(client, stationId);
+      if (n > 0) console.log(`[reports] resolved ${n} pending stakes on ${stationId}`);
+    } catch (err) {
+      console.warn("[reports] resolvePendingStakes failed:", err);
     }
 
     if (payoutError) {
