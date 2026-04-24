@@ -21,6 +21,8 @@ export type Station = {
   currentPricePerGallon: number | null;
   lastPricedAt: string | null;
   freshness: string;
+  consensusConfidence: "high" | "medium" | "low" | null;
+  consensusReportCount: number;
 };
 
 const POLL_MS = 5000;
@@ -42,7 +44,7 @@ const TIER_FILL: Record<Tier, string> = {
   none: "#f87171",
 };
 
-function buildMarkerEl(tier: Tier): HTMLElement {
+function buildMarkerEl(tier: Tier, lowConfidence: boolean): HTMLElement {
   const el = document.createElement("div");
   el.style.position = "relative";
   el.style.width = "20px";
@@ -74,7 +76,12 @@ function buildMarkerEl(tier: Tier): HTMLElement {
   dot.style.alignItems = "center";
   dot.style.justifyContent = "center";
   dot.style.transition = "transform 200ms ease-out, box-shadow 200ms ease-out";
-  dot.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="22" x2="15" y2="22"/><line x1="4" y1="9" x2="14" y2="9"/><path d="M14 22V4a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v18"/><path d="M14 13h2a2 2 0 0 1 2 2v2a2 2 0 0 0 2 2a2 2 0 0 0 2-2V9.83a2 2 0 0 0-.59-1.42L18 5"/></svg>`;
+  if (lowConfidence) {
+    // Substitute a "?" glyph for the fuel icon to signal data-quality concern.
+    dot.innerHTML = `<span style="color:white;font-family:system-ui,sans-serif;font-size:12px;font-weight:600;line-height:1;">?</span>`;
+  } else {
+    dot.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="22" x2="15" y2="22"/><line x1="4" y1="9" x2="14" y2="9"/><path d="M14 22V4a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v18"/><path d="M14 13h2a2 2 0 0 1 2 2v2a2 2 0 0 0 2 2a2 2 0 0 0 2-2V9.83a2 2 0 0 0-.59-1.42L18 5"/></svg>`;
+  }
   el.appendChild(dot);
 
   el.addEventListener("mouseenter", () => {
@@ -100,9 +107,9 @@ function freshnessBadgeClasses(tier: Tier): string {
 export function StationMap({ canReport }: { canReport: boolean }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<mapboxgl.Map | null>(null);
-  const markersRef = useRef<Map<string, { marker: mapboxgl.Marker; tier: Tier }>>(
-    new Map(),
-  );
+  const markersRef = useRef<
+    Map<string, { marker: mapboxgl.Marker; tier: Tier; lowConfidence: boolean }>
+  >(new Map());
   const [stations, setStations] = useState<Station[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [reportingId, setReportingId] = useState<string | null>(null);
@@ -160,13 +167,20 @@ export function StationMap({ canReport }: { canReport: boolean }) {
     const seen = new Set<string>();
     for (const s of stations) {
       seen.add(s.id);
-      const tier = tierFor(s.lastPricedAt);
+      const freshTier = tierFor(s.lastPricedAt);
+      // Consensus override: if the price exists but confidence is low, show
+      // amber + "?" glyph so the user knows the data is thinly supported.
+      // Null-price + any confidence stays red per freshTier (none).
+      const lowConfidence =
+        s.consensusConfidence === "low" && s.currentPricePerGallon !== null;
+      const tier: Tier =
+        lowConfidence && freshTier === "fresh" ? "aging" : freshTier;
       const existing = markersRef.current.get(s.id);
       if (existing) {
-        if (existing.tier !== tier) {
+        if (existing.tier !== tier || existing.lowConfidence !== lowConfidence) {
           // Tier changed — rebuild element to re-trigger pulse state.
           existing.marker.remove();
-          const el = buildMarkerEl(tier);
+          const el = buildMarkerEl(tier, lowConfidence);
           el.addEventListener("click", (e) => {
             e.stopPropagation();
             setSelectedId(s.id);
@@ -174,12 +188,12 @@ export function StationMap({ canReport }: { canReport: boolean }) {
           const marker = new mapboxgl.Marker({ element: el })
             .setLngLat([s.lng, s.lat])
             .addTo(map);
-          markersRef.current.set(s.id, { marker, tier });
+          markersRef.current.set(s.id, { marker, tier, lowConfidence });
         } else {
           existing.marker.setLngLat([s.lng, s.lat]);
         }
       } else {
-        const el = buildMarkerEl(tier);
+        const el = buildMarkerEl(tier, lowConfidence);
         el.addEventListener("click", (e) => {
           e.stopPropagation();
           setSelectedId(s.id);
@@ -187,7 +201,7 @@ export function StationMap({ canReport }: { canReport: boolean }) {
         const marker = new mapboxgl.Marker({ element: el })
           .setLngLat([s.lng, s.lat])
           .addTo(map);
-        markersRef.current.set(s.id, { marker, tier });
+        markersRef.current.set(s.id, { marker, tier, lowConfidence });
       }
     }
     for (const [id, { marker }] of markersRef.current) {
@@ -235,6 +249,20 @@ export function StationMap({ canReport }: { canReport: boolean }) {
                     {selected.freshness}
                   </span>
                 </div>
+                {(() => {
+                  const n = selected.consensusReportCount;
+                  const c = selected.consensusConfidence;
+                  if (n === 0 || c === null) return null;
+                  const label =
+                    n === 1
+                      ? `Based on ${n} report · low confidence`
+                      : `${n} reports in last 2 hours · ${c} confidence`;
+                  const cls =
+                    c === "low"
+                      ? "text-[12px] text-amber-700"
+                      : "text-[12px] text-zinc-500";
+                  return <p className={cls}>{label}</p>;
+                })()}
                 {canReport ? (
                   <button
                     onClick={() => {

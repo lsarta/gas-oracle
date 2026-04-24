@@ -6,7 +6,8 @@ export async function GET() {
   await client.connect();
   try {
     const { rows } = await client.query(
-      `SELECT id, name, address, lat, lng, current_price_per_gallon, last_priced_at
+      `SELECT id, name, address, lat, lng, current_price_per_gallon, last_priced_at,
+              consensus_confidence, consensus_report_count
          FROM stations
          ORDER BY current_price_per_gallon ASC NULLS LAST, name ASC`,
     );
@@ -22,6 +23,12 @@ export async function GET() {
           r.current_price_per_gallon === null ? null : Number(r.current_price_per_gallon),
         lastPricedAt: lastPricedAt ? lastPricedAt.toISOString() : null,
         freshness: freshnessLabel(lastPricedAt),
+        consensusConfidence: (r.consensus_confidence ?? null) as
+          | "high"
+          | "medium"
+          | "low"
+          | null,
+        consensusReportCount: Number(r.consensus_report_count ?? 0),
       };
     });
     return Response.json({ stations });
