@@ -5,7 +5,6 @@
 // md:rounded-none md:border-l md:border-t-0 md:translate-x-0 md:translate-x-full
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { usePrivy } from "@privy-io/react-auth";
 import {
@@ -17,8 +16,6 @@ import {
 } from "framer-motion";
 import mapboxgl from "mapbox-gl";
 import "mapbox-gl/dist/mapbox-gl.css";
-import { ConnectButton } from "@/components/ConnectButton";
-import { Wordmark } from "@/components/Wordmark";
 import { ReportDialog } from "@/components/ReportDialog";
 
 type Recommendation = {
@@ -366,36 +363,20 @@ export function RouteView({ stationId }: { stationId: string }) {
   }, [loaded, rec, stationId]);
 
   return (
-    <div>
-      <header className="fixed left-0 right-0 top-0 z-30 flex h-14 items-center justify-between border-b border-zinc-200 bg-white px-6">
-        <Link href="/">
-          <Wordmark size="sm" withMark />
-        </Link>
-        <nav className="flex items-center gap-6 text-[14px] text-zinc-700">
-          <Link href="/" className="hover:text-zinc-900">
-            Home
-          </Link>
-          <Link href="/map" className="hover:text-zinc-900">
-            Map
-          </Link>
-          <ConnectButton />
-        </nav>
-      </header>
+    <>
+      <div ref={containerRef} className="h-full w-full" />
 
-      <main className="fixed left-0 right-0 bottom-0 top-14">
-        <div ref={containerRef} className="absolute inset-0" />
+      {noticeText && !rec && (
+        <div className="absolute left-1/2 top-6 z-10 -translate-x-1/2 rounded-lg border border-zinc-200 bg-white px-4 py-2 text-[13px] text-zinc-700 shadow-sm">
+          {noticeText}
+        </div>
+      )}
 
-        {noticeText && !rec && (
-          <div className="absolute left-1/2 top-6 z-10 -translate-x-1/2 rounded-lg border border-zinc-200 bg-white px-4 py-2 text-[13px] text-zinc-700 shadow-sm">
-            {noticeText}
-          </div>
-        )}
-
-        {/* Side panel — slides in from right on desktop, up from bottom on mobile */}
-        {rec && (
-          <aside
-            className={asidePanelClasses(panelIn)}
-          >
+      {/* Side panel — slides in from right on desktop, up from bottom on mobile */}
+      {rec && (
+        <aside
+          className={asidePanelClasses(panelIn)}
+        >
             <div className="md:sticky md:top-0 px-6 pt-5">
               <div className="mx-auto mb-3 h-1 w-9 rounded-full bg-zinc-300 md:hidden" />
               <p className="font-inter text-[11px] font-medium uppercase tracking-wider text-zinc-500">
@@ -465,7 +446,6 @@ export function RouteView({ stationId }: { stationId: string }) {
             </div>
           </aside>
         )}
-      </main>
 
       <ReportDialog
         stationId={reporting}
@@ -476,6 +456,6 @@ export function RouteView({ stationId }: { stationId: string }) {
           router.push("/");
         }}
       />
-    </div>
+    </>
   );
 }
