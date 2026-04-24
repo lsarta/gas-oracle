@@ -186,7 +186,7 @@ export function ReportDialog({
   return (
     <Dialog open={isOpen} onOpenChange={(o) => !o && onClose()}>
       <DialogContent
-        className={`relative max-h-[calc(100vh-2rem)] overflow-hidden border-zinc-200 p-0 sm:max-w-[420px] ${
+        className={`max-h-[calc(100vh-2rem)] overflow-hidden border-zinc-200 p-0 sm:max-w-[420px] ${
           isSuccess ? "bg-gradient-to-b from-emerald-50/40 to-white" : "bg-white"
         }`}
         showCloseButton={false}
