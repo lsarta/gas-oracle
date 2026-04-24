@@ -170,7 +170,27 @@ export function RouteView({ stationId }: { stationId: string }) {
       "bottom-left",
     );
 
+    // iOS Safari + flex layouts often give the container its final size
+    // a tick or two after the map constructor runs. Without a resize, the
+    // map stays frozen at whatever the container was at init time — which
+    // on this page has been as little as ~30px, showing tiles only in a
+    // sliver at the top. A ResizeObserver covers URL-bar collapse too.
+    const ro = new ResizeObserver(() => {
+      mapRef.current?.resize();
+    });
+    ro.observe(containerRef.current);
+
+    // Belt-and-braces: kick a resize on the next few frames in case the
+    // ResizeObserver misses the initial layout pass.
+    const raf1 = requestAnimationFrame(() => mapRef.current?.resize());
+    const raf2 = requestAnimationFrame(() =>
+      requestAnimationFrame(() => mapRef.current?.resize()),
+    );
+
     return () => {
+      cancelAnimationFrame(raf1);
+      cancelAnimationFrame(raf2);
+      ro.disconnect();
       mapRef.current?.remove();
       mapRef.current = null;
     };
