@@ -366,8 +366,8 @@ export function RouteView({ stationId }: { stationId: string }) {
   }, [loaded, rec, stationId]);
 
   return (
-    <div className="flex h-screen flex-col">
-      <header className="z-30 flex h-14 shrink-0 items-center justify-between border-b border-zinc-200 bg-white px-6">
+    <div>
+      <header className="fixed left-0 right-0 top-0 z-30 flex h-14 items-center justify-between border-b border-zinc-200 bg-white px-6">
         <Link href="/">
           <Wordmark size="sm" withMark />
         </Link>
@@ -382,7 +382,7 @@ export function RouteView({ stationId }: { stationId: string }) {
         </nav>
       </header>
 
-      <main className="relative min-h-0 flex-1">
+      <main className="fixed left-0 right-0 bottom-0 top-14">
         <div ref={containerRef} className="absolute inset-0" />
 
         {noticeText && !rec && (
