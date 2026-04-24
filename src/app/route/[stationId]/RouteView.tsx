@@ -181,55 +181,17 @@ export function RouteView({ stationId }: { stationId: string }) {
     const map = mapRef.current;
     if (!map || !rec || !me) return;
 
-    const onReady = () => {
-      const coords = rec.routeGeometry?.coordinates ?? [];
+    // cleanupRef must be declared BEFORE any closure that writes to it,
+    // because some code paths (addRouteLayer → synchronous when style is
+    // already loaded) read/write to it during the same tick the effect runs.
+    // Previously this was declared AFTER and we hit a TDZ error under the
+    // synchronous style-loaded path.
+    const cleanupRef: { current: () => void } = { current: () => {} };
+    const coords = rec.routeGeometry?.coordinates ?? [];
 
-      // ---- Route line source + layer (drawn empty initially)
-      if (coords.length >= 2) {
-        if (!map.getSource("route")) {
-          map.addSource("route", {
-            type: "geojson",
-            data: {
-              type: "Feature",
-              properties: {},
-              geometry: { type: "LineString", coordinates: coords.slice(0, 2) },
-            },
-          });
-          map.addLayer({
-            id: "route",
-            type: "line",
-            source: "route",
-            layout: { "line-cap": "round", "line-join": "round" },
-            paint: {
-              "line-color": "#059669",
-              "line-width": 4,
-              "line-opacity": 0.9,
-            },
-          });
-        }
-
-        // Animate the polyline drawing in.
-        const start = performance.now();
-        const animateDraw = () => {
-          const elapsed = performance.now() - start;
-          const t = Math.min(1, elapsed / ROUTE_DRAW_MS);
-          const eased = 1 - Math.pow(1 - t, 3);
-          const endIdx = Math.max(2, Math.floor(coords.length * eased));
-          const partial = coords.slice(0, endIdx);
-          const src = map.getSource("route") as mapboxgl.GeoJSONSource | undefined;
-          if (src) {
-            src.setData({
-              type: "Feature",
-              properties: {},
-              geometry: { type: "LineString", coordinates: partial },
-            });
-          }
-          if (t < 1) requestAnimationFrame(animateDraw);
-        };
-        requestAnimationFrame(animateDraw);
-      }
-
-      // ---- Markers
+    try {
+      // ---- Markers first. These attach DOM elements via the Marker class
+      //      and do not touch the style, so they're safe before style.load.
       const stationMarker = new mapboxgl.Marker({ element: buildStationMarker() })
         .setLngLat([rec.station.lng, rec.station.lat])
         .addTo(map);
@@ -248,7 +210,7 @@ export function RouteView({ stationId }: { stationId: string }) {
               .addTo(map)
           : null;
 
-      // ---- Bounds: fit to all markers + route
+      // ---- Camera fit. Safe before style.load.
       const bounds = new mapboxgl.LngLatBounds();
       bounds.extend([rec.station.lng, rec.station.lat]);
       if (me.homeLat !== null && me.homeLng !== null) {
@@ -263,20 +225,81 @@ export function RouteView({ stationId }: { stationId: string }) {
         duration: 0,
       });
 
-      // Cleanup capture
+      // ---- Route source + layer MUST wait for style.load. The `load`
+      //      event and `map.loaded()` signal tile render, which can race
+      //      ahead of style parse — getSource/addSource throw a cryptic
+      //      "Cannot read properties of undefined (reading 'getOwnSource')"
+      //      if the style isn't ready.
+      const addRouteLayer = () => {
+        try {
+          if (!mapRef.current) return;
+          if (coords.length < 2) return;
+          if (!map.isStyleLoaded()) {
+            map.once("style.load", addRouteLayer);
+            return;
+          }
+          if (!map.getSource("route")) {
+            map.addSource("route", {
+              type: "geojson",
+              data: {
+                type: "Feature",
+                properties: {},
+                geometry: { type: "LineString", coordinates: coords.slice(0, 2) },
+              },
+            });
+            map.addLayer({
+              id: "route",
+              type: "line",
+              source: "route",
+              layout: { "line-cap": "round", "line-join": "round" },
+              paint: {
+                "line-color": "#059669",
+                "line-width": 4,
+                "line-opacity": 0.9,
+              },
+            });
+          }
+
+          const start = performance.now();
+          const animateDraw = () => {
+            if (!mapRef.current) return;
+            const elapsed = performance.now() - start;
+            const t = Math.min(1, elapsed / ROUTE_DRAW_MS);
+            const eased = 1 - Math.pow(1 - t, 3);
+            const endIdx = Math.max(2, Math.floor(coords.length * eased));
+            const partial = coords.slice(0, endIdx);
+            const src = map.getSource("route") as mapboxgl.GeoJSONSource | undefined;
+            if (src) {
+              src.setData({
+                type: "Feature",
+                properties: {},
+                geometry: { type: "LineString", coordinates: partial },
+              });
+            }
+            if (t < 1) requestAnimationFrame(animateDraw);
+          };
+          requestAnimationFrame(animateDraw);
+        } catch (err) {
+          console.error("[RouteView] addRouteLayer failed:", err);
+        }
+      };
+      addRouteLayer();
+
       cleanupRef.current = () => {
         stationMarker.remove();
         homeMarker?.remove();
         workMarker?.remove();
-        if (map.getLayer("route")) map.removeLayer("route");
-        if (map.getSource("route")) map.removeSource("route");
+        try {
+          if (map.getLayer("route")) map.removeLayer("route");
+          if (map.getSource("route")) map.removeSource("route");
+        } catch {
+          // Map may already be torn down by the outer init-effect cleanup.
+        }
       };
-    };
+    } catch (err) {
+      console.error("[RouteView] map-render effect failed:", err);
+    }
 
-    if (map.loaded()) onReady();
-    else map.once("load", onReady);
-
-    const cleanupRef = { current: () => {} };
     return () => cleanupRef.current();
   }, [rec, me]);
 
