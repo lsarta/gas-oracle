@@ -96,6 +96,7 @@ export function ReportDialog({
   const [result, setResult] = useState<{
     payoutAmountUsdc: number;
     payoutTxHash: string;
+    wasOutlier?: boolean;
   } | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
@@ -173,6 +174,7 @@ export function ReportDialog({
       setResult({
         payoutAmountUsdc: Number(json.payoutAmountUsdc),
         payoutTxHash: json.payoutTxHash,
+        wasOutlier: Boolean(json.wasOutlier),
       });
       setStage("delivered");
     } catch (err) {
@@ -296,6 +298,12 @@ export function ReportDialog({
                 {result.payoutTxHash.slice(0, 10)}…{result.payoutTxHash.slice(-8)}
                 <ExternalLink className="h-3.5 w-3.5" />
               </a>
+              {result.wasOutlier && (
+                <p className="mt-4 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-center text-[12px] leading-snug text-amber-700">
+                  Your report differs from recent consensus. Payout reduced while
+                  we verify.
+                </p>
+              )}
             </div>
           </>
         )}

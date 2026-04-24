@@ -14,6 +14,7 @@
     "db:seed": "tsx --env-file=.env.local scripts/db-seed.ts",
     "db:seed:parking": "tsx --env-file=.env.local scripts/db-seed-parking.ts",
     "test:recommend": "tsx --env-file=.env.local scripts/test-recommend.ts",
+    "test:consensus": "tsx --env-file=.env.local scripts/test-consensus.ts",
     "db:check-users": "tsx --env-file=.env.local scripts/db-check-users.ts",
     "db:check-queries": "tsx --env-file=.env.local scripts/db-check-queries.ts",
     "agent:run": "tsx --env-file=.env.local scripts/routing-agent.ts"

@@ -5,6 +5,11 @@ import {
   computeFreshnessPayout,
   computeImpliedPrice,
 } from "@/lib/oracle/pricing";
+import {
+  computeConsensusPrice,
+  isOutlier,
+  type ReportRow,
+} from "@/lib/oracle/consensus";
 import { sendUsdcToUser } from "@/lib/circle/payout";
 
 const BodySchema = z.object({
@@ -15,6 +20,34 @@ const BodySchema = z.object({
   transactionAmountUsd: z.number().positive(),
   gallons: z.number().positive(),
 });
+
+const OUTLIER_PAYOUT_FRACTION = 0.5;
+const REPORT_FETCH_LIMIT = 30;
+
+async function fetchRecentReports(
+  client: ReturnType<typeof createClient>,
+  stationId: string,
+): Promise<ReportRow[]> {
+  const { rows } = await client.query<{
+    id: string;
+    user_wallet: string;
+    computed_price_per_gallon: string | number;
+    created_at: Date | string;
+  }>(
+    `SELECT id, user_wallet, computed_price_per_gallon, created_at
+       FROM reports
+      WHERE station_id = $1 AND computed_price_per_gallon IS NOT NULL
+      ORDER BY created_at DESC
+      LIMIT ${REPORT_FETCH_LIMIT}`,
+    [stationId],
+  );
+  return rows.map((r) => ({
+    id: r.id,
+    user_wallet: r.user_wallet,
+    computed_price_per_gallon: Number(r.computed_price_per_gallon),
+    created_at: r.created_at instanceof Date ? r.created_at : new Date(r.created_at),
+  }));
+}
 
 export async function POST(request: NextRequest) {
   let parsed;
@@ -56,23 +89,55 @@ export async function POST(request: NextRequest) {
       last_priced_at: Date | null;
     };
 
-    const payoutAmount = computeFreshnessPayout(station.last_priced_at);
+    // ---- Consensus BEFORE this report is counted.
+    const priorReports = await fetchRecentReports(client, stationId);
+    const priorConsensus = computeConsensusPrice(priorReports);
+
+    // Outlier only meaningful when we have enough signal — require high-confidence
+    // consensus before flagging. Otherwise the first disagreement gets penalized.
+    const wasOutlier =
+      priorConsensus.confidence === "high" &&
+      isOutlier(impliedPrice, priorConsensus);
+
+    const freshnessPayout = computeFreshnessPayout(station.last_priced_at);
+    const payoutAmount = wasOutlier
+      ? Math.round(freshnessPayout * OUTLIER_PAYOUT_FRACTION * 1_000_000) /
+        1_000_000
+      : freshnessPayout;
 
     const insertRes = await client.query(
       `INSERT INTO reports (
          station_id, user_wallet, transaction_amount_usd, gallons,
-         computed_price_per_gallon, payout_amount_usdc
-       ) VALUES ($1, $2, $3, $4, $5, $6)
+         computed_price_per_gallon, payout_amount_usdc,
+         consensus_at_report, was_outlier
+       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
        RETURNING id`,
-      [stationId, userWallet, transactionAmountUsd, gallons, impliedPrice, payoutAmount],
+      [
+        stationId,
+        userWallet,
+        transactionAmountUsd,
+        gallons,
+        impliedPrice,
+        payoutAmount,
+        priorConsensus.consensusPrice,
+        wasOutlier,
+      ],
     );
     const reportId = insertRes.rows[0].id as string;
 
+    // ---- Consensus AFTER including the new report.
+    const postReports = await fetchRecentReports(client, stationId);
+    const newConsensus = computeConsensusPrice(postReports);
+    const newStationPrice = newConsensus.consensusPrice ?? impliedPrice;
+
     await client.query(
       `UPDATE stations
-         SET current_price_per_gallon = $1, last_priced_at = now()
-       WHERE id = $2`,
-      [impliedPrice, stationId],
+         SET current_price_per_gallon = $1,
+             last_priced_at = now(),
+             consensus_confidence = $2,
+             consensus_report_count = $3
+       WHERE id = $4`,
+      [newStationPrice, newConsensus.confidence, newConsensus.reportCount, stationId],
     );
 
     let txHash: string | null = null;
@@ -104,6 +169,10 @@ export async function POST(request: NextRequest) {
           payoutTxHash: null,
           blockNumber: null,
           stationName: station.name,
+          wasOutlier,
+          consensusPrice: priorConsensus.consensusPrice,
+          consensusConfidence: newConsensus.confidence,
+          newStationPrice,
           warning: "Report saved, but cashback transfer failed. Engineering will reconcile.",
           error: payoutError,
         },
@@ -118,6 +187,10 @@ export async function POST(request: NextRequest) {
       payoutTxHash: txHash,
       blockNumber,
       stationName: station.name,
+      wasOutlier,
+      consensusPrice: priorConsensus.consensusPrice,
+      consensusConfidence: newConsensus.confidence,
+      newStationPrice,
     });
   } catch (err) {
     return Response.json(
