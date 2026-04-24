@@ -240,10 +240,12 @@ export function OnboardingModal() {
       if (homePicked) {
         body.homeLat = homePicked.lat;
         body.homeLng = homePicked.lng;
+        body.homeAddress = homePicked.placeName;
       }
       if (workPicked) {
         body.workLat = workPicked.lat;
         body.workLng = workPicked.lng;
+        body.workAddress = workPicked.placeName;
       }
       if (hourly !== "") body.hourlyValueUsd = Number(hourly);
       if (mpg !== "") body.avgMpg = Number(mpg);
@@ -293,14 +295,20 @@ export function OnboardingModal() {
             picked={homePicked}
             onPick={setHomePicked}
           />
-          <AddressField
-            label="Work address"
-            optional
-            value={workQ}
-            onChange={setWorkQ}
-            picked={workPicked}
-            onPick={setWorkPicked}
-          />
+          <div className="space-y-1">
+            <AddressField
+              label="Work address"
+              optional
+              value={workQ}
+              onChange={setWorkQ}
+              picked={workPicked}
+              onPick={setWorkPicked}
+            />
+            <p className="text-[11px] text-zinc-500">
+              Unlocks commute-aware recommendations — stations on your route earn
+              you more than ones out of the way.
+            </p>
+          </div>
 
           <details className="group">
             <summary className="cursor-pointer select-none text-[13px] font-medium text-zinc-700 hover:text-zinc-900">

@@ -16,7 +16,8 @@ export async function GET(request: NextRequest) {
     const { rows } = await client.query(
       `SELECT id, privy_user_id, email, wallet_address,
               total_earned_usdc, total_saved_usd,
-              home_lat, home_lng, work_lat, work_lng,
+              home_lat, home_lng, home_address,
+              work_lat, work_lng, work_address,
               hourly_value_usd, avg_mpg, typical_fillup_gallons,
               created_at
          FROM users WHERE wallet_address = $1`,
@@ -42,8 +43,10 @@ export async function GET(request: NextRequest) {
         totalSavedUsd: Number(r.total_saved_usd),
         homeLat: r.home_lat === null ? null : Number(r.home_lat),
         homeLng: r.home_lng === null ? null : Number(r.home_lng),
+        homeAddress: r.home_address ?? null,
         workLat: r.work_lat === null ? null : Number(r.work_lat),
         workLng: r.work_lng === null ? null : Number(r.work_lng),
+        workAddress: r.work_address ?? null,
         hourlyValueUsd:
           r.hourly_value_usd === null ? null : Number(r.hourly_value_usd),
         avgMpg: r.avg_mpg === null ? null : Number(r.avg_mpg),
