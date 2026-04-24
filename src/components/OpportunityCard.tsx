@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
 type Recommendation = {
@@ -39,8 +40,11 @@ type Me = {
 
 const POLL_MS = 60_000;
 
+function dismissKey(stationId: string): string {
+  return `gyas:opportunity_dismissed_${stationId}`;
+}
+
 function encodePolyline(coords: [number, number][]): string {
-  // Google polyline algorithm — coords are [lng, lat] in GeoJSON, convert.
   let lastLat = 0;
   let lastLng = 0;
   let result = "";
@@ -75,27 +79,8 @@ function staticMapUrl(rec: Recommendation, me: Me): string {
   if (me.homeLat !== null && me.homeLng !== null) {
     overlays.push(`pin-s+a1a1aa(${me.homeLng},${me.homeLat})`);
   }
-  overlays.push(
-    `pin-l-fuel+059669(${rec.station.lng},${rec.station.lat})`,
-  );
-  const overlayStr = overlays.join(",");
-  return `https://api.mapbox.com/styles/v1/mapbox/light-v11/static/${overlayStr}/auto/600x180@2x?access_token=${token}&padding=40,40,40,40&attribution=false&logo=false`;
-}
-
-function googleDirectionsUrl(rec: Recommendation, me: Me): string {
-  const dest = `${rec.station.lat},${rec.station.lng}`;
-  const params = new URLSearchParams({ api: "1", destination: dest });
-  if (me.homeLat !== null && me.homeLng !== null) {
-    params.set("origin", `${me.homeLat},${me.homeLng}`);
-  }
-  if (me.workLat !== null && me.workLng !== null) {
-    // Google supports `waypoints` but a single waypoint is the station; the
-    // final destination becomes work, station goes in waypoints.
-    params.set("origin", `${me.homeLat},${me.homeLng}`);
-    params.set("destination", `${me.workLat},${me.workLng}`);
-    params.set("waypoints", dest);
-  }
-  return `https://www.google.com/maps/dir/?${params.toString()}`;
+  overlays.push(`pin-l-fuel+059669(${rec.station.lng},${rec.station.lat})`);
+  return `https://api.mapbox.com/styles/v1/mapbox/light-v11/static/${overlays.join(",")}/auto/600x180@2x?access_token=${token}&padding=40,40,40,40&attribution=false&logo=false`;
 }
 
 function MathBreakdown({ rec }: { rec: Recommendation }) {
@@ -108,9 +93,16 @@ function MathBreakdown({ rec }: { rec: Recommendation }) {
 }
 
 export function OpportunityCard({ wallet }: { wallet?: string }) {
+  const router = useRouter();
   const [data, setData] = useState<ApiResponse | null>(null);
-  const [me, setMe] = useState<Me>({ homeLat: null, homeLng: null, workLat: null, workLng: null });
+  const [me, setMe] = useState<Me>({
+    homeLat: null,
+    homeLng: null,
+    workLat: null,
+    workLng: null,
+  });
   const [loaded, setLoaded] = useState(false);
+  const [dismissedStationId, setDismissedStationId] = useState<string | null>(null);
 
   const fetchAll = useCallback(async () => {
     try {
@@ -153,6 +145,19 @@ export function OpportunityCard({ wallet }: { wallet?: string }) {
     };
   }, [fetchAll]);
 
+  // Read sessionStorage dismissal on mount and whenever the recommendation
+  // station changes (a new station's recommendation shows fresh).
+  useEffect(() => {
+    const sid = data?.recommendation?.station.id;
+    if (!sid) {
+      setDismissedStationId(null);
+      return;
+    }
+    if (typeof window === "undefined") return;
+    const dismissed = sessionStorage.getItem(dismissKey(sid));
+    setDismissedStationId(dismissed ? sid : null);
+  }, [data?.recommendation?.station.id]);
+
   if (!loaded) {
     return (
       <section className="mx-auto w-full max-w-[560px]">
@@ -189,7 +194,6 @@ export function OpportunityCard({ wallet }: { wallet?: string }) {
             onClick={() => {
               if (typeof window !== "undefined") {
                 sessionStorage.removeItem("gyas:onboarding-dismissed");
-                window.dispatchEvent(new CustomEvent("gyas:open-onboarding"));
                 window.location.reload();
               }
             }}
@@ -244,32 +248,65 @@ export function OpportunityCard({ wallet }: { wallet?: string }) {
     );
   }
 
+  // STATE D — dismissed (subtle, replaces the worthDetouring state)
+  if (dismissedStationId === rec.station.id) {
+    return (
+      <section className="mx-auto w-full max-w-[560px]">
+        <div className="rounded-xl border border-zinc-200 bg-[#FAFAF8] px-6 py-5">
+          <p className="text-[14px] text-zinc-500">
+            Opportunity dismissed. We&apos;ll check again in an hour.
+          </p>
+          <button
+            type="button"
+            onClick={() => {
+              if (typeof window === "undefined") return;
+              sessionStorage.removeItem(dismissKey(rec.station.id));
+              setDismissedStationId(null);
+            }}
+            className="mt-2 text-[13px] font-medium text-emerald-700 underline-offset-4 hover:underline"
+          >
+            Show it anyway
+          </button>
+        </div>
+      </section>
+    );
+  }
+
   // STATE C — worth detouring (happy path)
   const mapUrl = staticMapUrl(rec, me);
-  const directionsUrl = googleDirectionsUrl(rec, me);
 
-  async function handleGetDirections(_e: React.MouseEvent<HTMLAnchorElement>) {
+  async function handleGetDirections() {
     if (!wallet || !rec) return;
-    try {
-      const res = await fetch("/api/savings/take", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          userWallet: wallet,
-          stationId: rec.station.id,
-          recommendedPrice: rec.station.price,
-          baselinePrice: rec.baselinePrice,
-          netSavingsUsd: rec.netSavings,
-          detourMinutes: rec.detourMinutes,
-          detourMiles: rec.detourMiles,
-        }),
+    // Fire-and-forget the take so navigation isn't blocked on a slow API.
+    void fetch("/api/savings/take", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        userWallet: wallet,
+        stationId: rec.station.id,
+        recommendedPrice: rec.station.price,
+        baselinePrice: rec.baselinePrice,
+        netSavingsUsd: rec.netSavings,
+        detourMinutes: rec.detourMinutes,
+        detourMiles: rec.detourMiles,
+      }),
+    })
+      .then((res) => {
+        if (res.ok) {
+          toast.success(`Saved $${rec.netSavings.toFixed(2)} — recorded to your earnings`);
+        }
+      })
+      .catch(() => {
+        /* best-effort */
       });
-      if (res.ok) {
-        toast.success(`Saved $${rec.netSavings.toFixed(2)} — recorded to your earnings`);
-      }
-    } catch {
-      /* best-effort */
-    }
+    router.push(`/route/${rec.station.id}`);
+  }
+
+  function handleDismiss() {
+    if (!rec) return;
+    if (typeof window === "undefined") return;
+    sessionStorage.setItem(dismissKey(rec.station.id), String(Date.now()));
+    setDismissedStationId(rec.station.id);
   }
 
   return (
@@ -301,9 +338,6 @@ export function OpportunityCard({ wallet }: { wallet?: string }) {
               className="h-full w-full object-cover"
               loading="lazy"
             />
-            {/* Pulse overlay sits at image center; precise green destination
-                pin is rendered by Mapbox's pin-l-fuel marker. The pulse is a
-                visual cue, not a precise marker. */}
             <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
               <div className="relative h-3 w-3">
                 <span
@@ -316,17 +350,16 @@ export function OpportunityCard({ wallet }: { wallet?: string }) {
         )}
 
         <div className="mt-6 flex flex-col gap-2">
-          <a
-            href={directionsUrl}
-            target="_blank"
-            rel="noreferrer"
+          <button
+            type="button"
             onClick={handleGetDirections}
             className="inline-flex h-11 items-center justify-center rounded-lg bg-emerald-600 text-[15px] font-medium text-white transition-colors hover:bg-emerald-700"
           >
             Get directions
-          </a>
+          </button>
           <button
             type="button"
+            onClick={handleDismiss}
             className="text-center text-[14px] text-zinc-500 underline-offset-4 hover:text-zinc-900 hover:underline"
           >
             Not now

@@ -6,7 +6,7 @@ import { usePrivy } from "@privy-io/react-auth";
 import { toast } from "sonner";
 import { ConnectButton } from "@/components/ConnectButton";
 import { Wordmark } from "@/components/Wordmark";
-import { MapPin } from "lucide-react";
+import { MapPin, Trash2 } from "lucide-react";
 
 const DEBOUNCE_MS = 250;
 
@@ -219,6 +219,26 @@ export default function SettingsPage() {
       body: JSON.stringify({ walletAddress: wallet, ...body }),
     });
     await refresh();
+    // Notify the OpportunityCard so it refetches without waiting for its
+    // 60s poll cycle.
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("gyas:prefs-updated"));
+    }
+  }
+
+  async function clearLocations() {
+    if (!wallet) return;
+    if (typeof window !== "undefined") {
+      const ok = window.confirm(
+        "Clear your home and work addresses? You'll need to set them again to get recommendations.",
+      );
+      if (!ok) return;
+    }
+    await postUpdate({ homeLat: null, homeLng: null, workLat: null, workLng: null });
+    if (typeof window !== "undefined") {
+      sessionStorage.removeItem("gyas:onboarding-dismissed");
+    }
+    toast.success("Locations cleared");
   }
 
   async function savePrefs() {
@@ -301,6 +321,16 @@ export default function SettingsPage() {
                     toast.success("Work address cleared.");
                   }}
                 />
+              </div>
+              <div className="mt-3 flex justify-end">
+                <button
+                  type="button"
+                  onClick={clearLocations}
+                  className="inline-flex items-center gap-1.5 text-[12px] text-zinc-500 hover:text-red-600"
+                >
+                  <Trash2 className="h-3 w-3" />
+                  Clear locations
+                </button>
               </div>
             </section>
 
