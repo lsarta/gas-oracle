@@ -30,3 +30,19 @@ export class RoutingError extends Error {
     this.name = "RoutingError";
   }
 }
+
+export type DetourRequest = {
+  baseline: { origin: LatLng; destination: LatLng };
+  waypoint: LatLng;
+};
+
+export type DetourResult = {
+  baselineDistanceMeters: number;
+  baselineDurationSeconds: number;
+  detourDistanceMeters: number;
+  detourDurationSeconds: number;
+  extraMiles: number;
+  extraMinutes: number;
+  /** Geometry of the detour route (origin → waypoint → destination). */
+  detourGeometry: { type: "LineString"; coordinates: [number, number][] };
+};

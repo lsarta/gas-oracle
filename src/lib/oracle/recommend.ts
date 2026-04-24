@@ -1,4 +1,4 @@
-import { getRoute, RoutingError, type LatLng, type Route } from "@/lib/routing";
+import { computeDetour, getRoute, type LatLng } from "@/lib/routing";
 import { medianPrice } from "@/lib/oracle/savings";
 
 export type Station = {
@@ -38,6 +38,10 @@ export type Recommendation = {
   netSavings: number;
   worthDetouring: boolean;
   routeGeometry: object | null;
+  /** Whether detour miles/minutes came from Mapbox Directions or the
+   *  Haversine fallback (on rate-limit / no-route). Stored but not
+   *  currently surfaced in the UI. */
+  routingSource: "mapbox" | "haversine_fallback";
 };
 
 const METERS_PER_MILE = 1609.344;
@@ -85,75 +89,72 @@ type DetourResult = {
   detourMiles: number;
   detourMinutes: number;
   routeGeometry: object | null;
-  /** True when we fell back to Haversine because routing failed. */
-  degraded: boolean;
+  routingSource: "mapbox" | "haversine_fallback";
 };
 
 async function detourViaStation(
-  origin: LatLng,
+  home: LatLng,
   station: LatLng,
-  destination: LatLng | null,
-  baselineRoute: Route | null,
+  work: LatLng | null,
+  stationId: string,
 ): Promise<DetourResult> {
-  // Round-trip case (no work): home → station → home.
-  if (destination === null) {
+  // ---- Home-only: full round-trip home → station → home via Mapbox.
+  if (work === null) {
     try {
-      const out = await getRoute({ origin, destination: station });
-      // Symmetric round-trip: 2× one-way is close enough; saves a Mapbox call.
-      const miles = (out.distanceMeters * 2) / METERS_PER_MILE;
-      const minutes = (out.durationSeconds * 2) / 60;
+      const [leg1, leg2] = await Promise.all([
+        getRoute({ origin: home, destination: station }),
+        getRoute({ origin: station, destination: home }),
+      ]);
       return {
-        detourMiles: miles,
-        detourMinutes: minutes,
-        routeGeometry: out.geometry,
-        degraded: false,
+        detourMiles:
+          (leg1.distanceMeters + leg2.distanceMeters) / METERS_PER_MILE,
+        detourMinutes: (leg1.durationSeconds + leg2.durationSeconds) / 60,
+        // Show the outbound leg so the /route page can render the pointing-to-
+        // station polyline; the return leg would visually duplicate it.
+        routeGeometry: leg1.geometry,
+        routingSource: "mapbox",
       };
     } catch (err) {
-      console.warn("[recommend] routing failed, haversine fallback:", err);
-      const miles = haversineMiles(origin, station) * 2;
-      // Time cost set to 0 in the caller when degraded=true; report 4 min/mile
-      // so the UI doesn't display zero time, just so the math comes out OK.
+      console.warn(
+        `[recommend] Mapbox degraded for station ${stationId}, using Haversine fallback:`,
+        err instanceof Error ? err.message : err,
+      );
+      const miles = haversineMiles(home, station) * 2;
       return {
         detourMiles: miles,
         detourMinutes: miles * 4,
         routeGeometry: null,
-        degraded: true,
+        routingSource: "haversine_fallback",
       };
     }
   }
 
-  // Commute case: detour = (home → station → work) − (home → work).
-  if (!baselineRoute) {
-    throw new Error("commute case requires baselineRoute");
-  }
+  // ---- Commute: real corridor detour via Mapbox.
   try {
-    const out = await getRoute({
-      origin,
-      destination,
-      waypoints: [station],
+    const det = await computeDetour({
+      baseline: { origin: home, destination: work },
+      waypoint: station,
     });
-    const detourMeters = Math.max(0, out.distanceMeters - baselineRoute.distanceMeters);
-    const detourSecs = Math.max(
-      0,
-      out.durationSeconds - baselineRoute.durationSeconds,
-    );
     return {
-      detourMiles: detourMeters / METERS_PER_MILE,
-      detourMinutes: detourSecs / 60,
-      routeGeometry: out.geometry,
-      degraded: false,
+      detourMiles: det.extraMiles,
+      detourMinutes: det.extraMinutes,
+      routeGeometry: det.detourGeometry,
+      routingSource: "mapbox",
     };
   } catch (err) {
-    console.warn("[recommend] routing failed, haversine fallback:", err);
-    const baseline = haversineMiles(origin, destination);
+    console.warn(
+      `[recommend] Mapbox degraded for station ${stationId}, using Haversine fallback:`,
+      err instanceof Error ? err.message : err,
+    );
+    const baseline = haversineMiles(home, work);
     const viaStation =
-      haversineMiles(origin, station) + haversineMiles(station, destination);
+      haversineMiles(home, station) + haversineMiles(station, work);
     const detourMiles = Math.max(0, viaStation - baseline);
     return {
       detourMiles,
       detourMinutes: detourMiles * 4,
       routeGeometry: null,
-      degraded: true,
+      routingSource: "haversine_fallback",
     };
   }
 }
@@ -209,36 +210,14 @@ export async function recommendStation(
   const baselinePrice = medianPrice(baselineSource);
   if (baselinePrice === null) return null;
 
-  // ---- Get baseline route once for commute case (single Mapbox call shared
-  // across all candidate evaluations).
-  let baselineRoute: Route | null = null;
-  if (work !== null) {
-    try {
-      baselineRoute = await getRoute({ origin: home, destination: work });
-    } catch (err) {
-      console.warn("[recommend] baseline route failed, falling back:", err);
-      // Construct a synthetic baseline using Haversine so detour math works.
-      const miles = haversineMiles(home, work);
-      baselineRoute = {
-        distanceMeters: miles * METERS_PER_MILE,
-        durationSeconds: miles * 60 * 4, // 4 min/mile fallback
-        geometry: {
-          type: "LineString",
-          coordinates: [
-            [home.lng, home.lat],
-            [work.lng, work.lat],
-          ],
-        },
-      };
-    }
-  }
-
   // ---- Limit to the cheapest 5 prefiltered candidates to bound Mapbox calls.
   const topCheap = [...prefiltered]
     .sort((a, b) => a.price - b.price)
     .slice(0, 5);
 
-  // ---- Score each candidate.
+  // ---- Score each candidate. computeDetour internally reuses the baseline
+  //      route via the 5-min cache, so the commute case makes ~1 + N calls
+  //      (1 baseline + 1 detour per candidate) in the cold path.
   type Scored = Recommendation & { _candidate: Station };
   const scored: Scored[] = [];
   for (const c of topCheap) {
@@ -246,12 +225,16 @@ export async function recommendStation(
       home,
       { lat: c.lat, lng: c.lng },
       work,
-      baselineRoute,
+      c.id,
     );
     if (detour.detourMinutes > MAX_DETOUR_MIN) continue;
 
     const rawSavings = (baselinePrice - c.price) * user.typicalFillupGallons;
-    const detourTimeCost = detour.degraded
+    // Haversine fallback zeros time cost because the "minutes" figure is a
+    // rough distance-derived guess, not an actual driving duration — charging
+    // the user's hourly rate against it would be misleading.
+    const isFallback = detour.routingSource === "haversine_fallback";
+    const detourTimeCost = isFallback
       ? 0
       : (detour.detourMinutes / 60) * user.hourlyValueUsd;
     const detourGasCost = (detour.detourMiles / user.avgMpg) * c.price;
@@ -276,6 +259,7 @@ export async function recommendStation(
       netSavings: round2(netSavings),
       worthDetouring: netSavings > 0,
       routeGeometry: detour.routeGeometry,
+      routingSource: detour.routingSource,
     });
   }
 
@@ -302,6 +286,7 @@ export async function recommendStation(
       netSavings: 0,
       worthDetouring: false,
       routeGeometry: null,
+      routingSource: "mapbox",
     };
   }
 

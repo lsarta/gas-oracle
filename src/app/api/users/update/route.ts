@@ -6,8 +6,10 @@ const BodySchema = z.object({
   walletAddress: z.string().regex(/^0x[a-fA-F0-9]{40}$/),
   homeLat: z.number().min(-90).max(90).optional(),
   homeLng: z.number().min(-180).max(180).optional(),
+  homeAddress: z.string().max(500).optional(),
   workLat: z.number().min(-90).max(90).nullable().optional(),
   workLng: z.number().min(-180).max(180).nullable().optional(),
+  workAddress: z.string().max(500).nullable().optional(),
   hourlyValueUsd: z.number().positive().optional(),
   avgMpg: z.number().positive().optional(),
   typicalFillupGallons: z.number().positive().optional(),
@@ -28,8 +30,10 @@ export async function POST(request: NextRequest) {
     walletAddress,
     homeLat,
     homeLng,
+    homeAddress,
     workLat,
     workLng,
+    workAddress,
     hourlyValueUsd,
     avgMpg,
     typicalFillupGallons,
@@ -38,27 +42,27 @@ export async function POST(request: NextRequest) {
   const client = createClient();
   await client.connect();
   try {
-    // COALESCE leaves an existing value alone when the new value is undefined
-    // (passed as NULL). For explicit clears (e.g. removing work address) the
-    // client sends `null`, which COALESCE treats the same — so to allow
-    // clearing we use a CASE form for the work fields below.
     const res = await client.query(
       `UPDATE users
          SET home_lat = COALESCE($1, home_lat),
              home_lng = COALESCE($2, home_lng),
-             work_lat = $3,
-             work_lng = $4,
-             hourly_value_usd = COALESCE($5, hourly_value_usd),
-             avg_mpg = COALESCE($6, avg_mpg),
-             typical_fillup_gallons = COALESCE($7, typical_fillup_gallons)
-       WHERE wallet_address = $8
-       RETURNING id, home_lat, home_lng, work_lat, work_lng,
+             home_address = COALESCE($3, home_address),
+             work_lat = $4,
+             work_lng = $5,
+             work_address = $6,
+             hourly_value_usd = COALESCE($7, hourly_value_usd),
+             avg_mpg = COALESCE($8, avg_mpg),
+             typical_fillup_gallons = COALESCE($9, typical_fillup_gallons)
+       WHERE wallet_address = $10
+       RETURNING id, home_lat, home_lng, home_address, work_lat, work_lng, work_address,
                  hourly_value_usd, avg_mpg, typical_fillup_gallons`,
       [
         homeLat ?? null,
         homeLng ?? null,
+        homeAddress ?? null,
         workLat === undefined ? undefined : workLat,
         workLng === undefined ? undefined : workLng,
+        workAddress === undefined ? undefined : workAddress,
         hourlyValueUsd ?? null,
         avgMpg ?? null,
         typicalFillupGallons ?? null,

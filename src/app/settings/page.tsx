@@ -6,7 +6,7 @@ import { usePrivy } from "@privy-io/react-auth";
 import { toast } from "sonner";
 import { ConnectButton } from "@/components/ConnectButton";
 import { Wordmark } from "@/components/Wordmark";
-import { MapPin, Trash2 } from "lucide-react";
+import { Info, MapPin, Trash2 } from "lucide-react";
 
 const DEBOUNCE_MS = 250;
 
@@ -40,8 +40,10 @@ async function geocode(q: string): Promise<Suggestion[]> {
 type Me = {
   homeLat: number | null;
   homeLng: number | null;
+  homeAddress: string | null;
   workLat: number | null;
   workLng: number | null;
+  workAddress: string | null;
   hourlyValueUsd: number | null;
   avgMpg: number | null;
   typicalFillupGallons: number | null;
@@ -50,11 +52,16 @@ type Me = {
 function AddressEditor({
   label,
   initialCoords,
+  initialAddress,
+  emptyCallout,
   onSave,
   onClear,
 }: {
   label: string;
   initialCoords: { lat: number; lng: number } | null;
+  initialAddress: string | null;
+  /** Shown in place of "Not set" when no coords are saved yet. */
+  emptyCallout?: React.ReactNode;
   onSave: (s: Suggestion) => void;
   onClear?: () => void;
 }) {
@@ -79,17 +86,43 @@ function AddressEditor({
   }, [q, editing, picked]);
 
   if (!editing) {
+    if (!initialCoords && emptyCallout) {
+      return (
+        <div className="space-y-2">
+          <p className="font-inter text-[11px] font-medium uppercase tracking-wider text-zinc-500">
+            {label}
+          </p>
+          {emptyCallout}
+          <button
+            type="button"
+            onClick={() => setEditing(true)}
+            className="text-[13px] font-medium text-zinc-700 hover:text-zinc-900"
+          >
+            Set {label.toLowerCase()}
+          </button>
+        </div>
+      );
+    }
     return (
       <div className="flex items-center justify-between gap-3">
         <div className="min-w-0">
           <p className="font-inter text-[11px] font-medium uppercase tracking-wider text-zinc-500">
             {label}
           </p>
-          <p className="mt-1 truncate text-[14px] text-zinc-900">
-            {initialCoords
-              ? `${initialCoords.lat.toFixed(5)}, ${initialCoords.lng.toFixed(5)}`
-              : "Not set"}
-          </p>
+          {initialAddress ? (
+            <p className="mt-1 truncate text-[14px] text-zinc-900">{initialAddress}</p>
+          ) : initialCoords ? (
+            <>
+              <p className="mt-1 truncate font-mono text-[13px] text-zinc-700">
+                {initialCoords.lat.toFixed(5)}, {initialCoords.lng.toFixed(5)}
+              </p>
+              <p className="mt-0.5 text-[11px] text-zinc-500">
+                Re-set to see address
+              </p>
+            </>
+          ) : (
+            <p className="mt-1 text-[14px] text-zinc-500">Not set</p>
+          )}
         </div>
         <div className="flex items-center gap-2">
           {initialCoords && onClear && (
@@ -195,8 +228,10 @@ export default function SettingsPage() {
       setMe({
         homeLat: j.user.homeLat,
         homeLng: j.user.homeLng,
+        homeAddress: j.user.homeAddress,
         workLat: j.user.workLat,
         workLng: j.user.workLng,
+        workAddress: j.user.workAddress,
         hourlyValueUsd: j.user.hourlyValueUsd,
         avgMpg: j.user.avgMpg,
         typicalFillupGallons: j.user.typicalFillupGallons,
@@ -234,7 +269,14 @@ export default function SettingsPage() {
       );
       if (!ok) return;
     }
-    await postUpdate({ homeLat: null, homeLng: null, workLat: null, workLng: null });
+    await postUpdate({
+      homeLat: null,
+      homeLng: null,
+      homeAddress: null,
+      workLat: null,
+      workLng: null,
+      workAddress: null,
+    });
     if (typeof window !== "undefined") {
       sessionStorage.removeItem("gyas:onboarding-dismissed");
     }
@@ -299,8 +341,13 @@ export default function SettingsPage() {
                       ? { lat: me.homeLat, lng: me.homeLng }
                       : null
                   }
+                  initialAddress={me.homeAddress}
                   onSave={async (s) => {
-                    await postUpdate({ homeLat: s.lat, homeLng: s.lng });
+                    await postUpdate({
+                      homeLat: s.lat,
+                      homeLng: s.lng,
+                      homeAddress: s.placeName,
+                    });
                     toast.success("Home address updated.");
                   }}
                 />
@@ -312,12 +359,30 @@ export default function SettingsPage() {
                       ? { lat: me.workLat, lng: me.workLng }
                       : null
                   }
+                  initialAddress={me.workAddress}
+                  emptyCallout={
+                    <div className="flex items-start gap-2 rounded-lg border border-zinc-200 bg-zinc-50 p-3">
+                      <Info className="mt-0.5 h-3.5 w-3.5 shrink-0 text-zinc-500" />
+                      <p className="text-[12px] leading-snug text-zinc-600">
+                        Set work to get commute-aware recommendations. Stations on
+                        your route earn you more than ones out of the way.
+                      </p>
+                    </div>
+                  }
                   onSave={async (s) => {
-                    await postUpdate({ workLat: s.lat, workLng: s.lng });
+                    await postUpdate({
+                      workLat: s.lat,
+                      workLng: s.lng,
+                      workAddress: s.placeName,
+                    });
                     toast.success("Work address updated.");
                   }}
                   onClear={async () => {
-                    await postUpdate({ workLat: null, workLng: null });
+                    await postUpdate({
+                      workLat: null,
+                      workLng: null,
+                      workAddress: null,
+                    });
                     toast.success("Work address cleared.");
                   }}
                 />
