@@ -1,5 +1,10 @@
 import { createClient } from "@/lib/db/client";
 import { freshnessLabel } from "@/lib/oracle/freshness";
+import {
+  computeBountyAmount,
+  shouldRequireStake,
+  stakeAmountFor,
+} from "@/lib/oracle/stakes";
 
 export async function GET() {
   const client = createClient();
@@ -13,6 +18,12 @@ export async function GET() {
     );
     const stations = rows.map((r) => {
       const lastPricedAt: Date | null = r.last_priced_at;
+      const activeBounty = computeBountyAmount({
+        last_priced_at: lastPricedAt,
+        consensus_confidence: r.consensus_confidence ?? null,
+        consensus_report_count: Number(r.consensus_report_count ?? 0),
+      });
+      const requiresStake = shouldRequireStake(activeBounty);
       return {
         id: r.id as string,
         name: r.name as string,
@@ -29,6 +40,9 @@ export async function GET() {
           | "low"
           | null,
         consensusReportCount: Number(r.consensus_report_count ?? 0),
+        activeBounty,
+        requiresStake,
+        stakeAmount: requiresStake ? stakeAmountFor(activeBounty) : 0,
       };
     });
     return Response.json({ stations });

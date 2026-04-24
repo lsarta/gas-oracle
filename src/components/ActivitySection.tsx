@@ -18,6 +18,17 @@ type RecentReport = {
   createdAt: string;
 };
 
+type Stake = {
+  id: string;
+  status: "pending" | "confirmed" | "slashed" | "expired";
+  stakeAmountUsdc: number;
+  bountyAmountUsdc: number;
+  stationId: string;
+  stationName: string;
+  createdAt: string;
+  resolvedAt: string | null;
+};
+
 type Station = { id: string; name: string; address: string };
 
 const POLL_MS = 10_000;
@@ -35,6 +46,7 @@ function timeAgo(iso: string): string {
 export function ActivitySection({ wallet }: { wallet: string }) {
   const [me, setMe] = useState<Me | null>(null);
   const [reports, setReports] = useState<RecentReport[]>([]);
+  const [stakes, setStakes] = useState<Stake[]>([]);
   const [stations, setStations] = useState<Station[]>([]);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [reporting, setReporting] = useState<string | null>(null);
@@ -43,12 +55,14 @@ export function ActivitySection({ wallet }: { wallet: string }) {
     let aborted = false;
     async function load() {
       try {
-        const [meRes, repRes] = await Promise.all([
+        const [meRes, repRes, stakesRes] = await Promise.all([
           fetch(`/api/users/me?wallet=${wallet}`, { cache: "no-store" }),
           fetch(`/api/reports/recent`, { cache: "no-store" }),
+          fetch(`/api/stakes/recent?wallet=${wallet}`, { cache: "no-store" }),
         ]);
         const meJson = await meRes.json();
         const repJson = await repRes.json();
+        const stakesJson = await stakesRes.json();
         if (aborted) return;
         if (meJson.user) {
           setMe({
@@ -59,6 +73,7 @@ export function ActivitySection({ wallet }: { wallet: string }) {
         }
         const all = (repJson.reports as RecentReport[]) ?? [];
         setReports(all.slice(0, 5));
+        setStakes((stakesJson.stakes as Stake[]) ?? []);
       } catch {
         /* ignore */
       }
@@ -138,41 +153,116 @@ export function ActivitySection({ wallet }: { wallet: string }) {
           </div>
         </div>
 
+        {(() => {
+          const pending = stakes.filter((s) => s.status === "pending");
+          if (pending.length === 0) return null;
+          return (
+            <>
+              <p className="mt-8 font-inter text-[11px] font-medium uppercase tracking-wider text-zinc-500">
+                Pending stakes
+              </p>
+              <ul className="mt-3 divide-y divide-zinc-100">
+                {pending.map((s) => (
+                  <li
+                    key={s.id}
+                    className="flex items-center justify-between gap-3 py-3"
+                  >
+                    <div className="min-w-0">
+                      <div className="truncate text-[14px] text-zinc-900">
+                        {s.stationName}
+                      </div>
+                      <div className="mt-0.5 text-[12px] text-zinc-500">
+                        Resolves after 2 more reports
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <div className="font-mono text-[14px] text-zinc-900">
+                        ${s.stakeAmountUsdc.toFixed(2)} staked
+                      </div>
+                      <div className="mt-0.5 font-mono text-[11px] text-emerald-700">
+                        ${s.bountyAmountUsdc.toFixed(2)} bounty pending
+                      </div>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </>
+          );
+        })()}
+
         <p className="mt-8 font-inter text-[11px] font-medium uppercase tracking-wider text-zinc-500">
           Recent
         </p>
 
-        {reports.length === 0 ? (
-          <div className="mt-3">
-            <p className="text-[14px] text-zinc-500">No reports yet.</p>
-            <p className="mt-1 text-[12px] text-zinc-400">
-              Tap the map to confirm a price.
-            </p>
-          </div>
-        ) : (
-          <ul className="mt-3 divide-y divide-zinc-100">
-            {reports.map((r) => (
-              <li key={r.id} className="flex items-center justify-between gap-3 py-3">
-                <div className="min-w-0">
-                  <div className="truncate text-[14px] text-zinc-900">{r.stationName}</div>
-                  <div className="mt-0.5 font-mono text-[11px] text-zinc-500">
-                    {r.pricePerGallon !== null
-                      ? `$${r.pricePerGallon.toFixed(2)}/gal`
-                      : "no price"}
+        {(() => {
+          const resolvedStakes = stakes
+            .filter((s) => s.status === "confirmed" || s.status === "slashed")
+            .slice(0, 3);
+          const hasAny = reports.length > 0 || resolvedStakes.length > 0;
+          if (!hasAny) {
+            return (
+              <div className="mt-3">
+                <p className="text-[14px] text-zinc-500">No reports yet.</p>
+                <p className="mt-1 text-[12px] text-zinc-400">
+                  Tap the map to confirm a price.
+                </p>
+              </div>
+            );
+          }
+          return (
+            <ul className="mt-3 divide-y divide-zinc-100">
+              {resolvedStakes.map((s) => (
+                <li
+                  key={s.id}
+                  className="flex items-center justify-between gap-3 py-3"
+                >
+                  <div className="min-w-0">
+                    <div className="truncate text-[14px] text-zinc-900">
+                      {s.stationName}
+                    </div>
+                    <div className="mt-0.5 text-[11px] text-zinc-500">
+                      {s.status === "confirmed" ? "Stake confirmed" : "Stake slashed"}
+                    </div>
                   </div>
-                </div>
-                <div className="text-right">
-                  <div className="font-mono text-[14px] text-emerald-600">
-                    +${(r.payoutAmountUsdc ?? 0).toFixed(3)} USDC
+                  <div className="text-right">
+                    {s.status === "confirmed" ? (
+                      <div className="font-mono text-[14px] text-emerald-600">
+                        +${(s.stakeAmountUsdc + s.bountyAmountUsdc).toFixed(2)} USDC
+                      </div>
+                    ) : (
+                      <div className="font-mono text-[14px] text-red-500">
+                        −${s.stakeAmountUsdc.toFixed(2)} USDC
+                      </div>
+                    )}
+                    <div className="mt-0.5 text-[11px] text-zinc-400">
+                      {s.resolvedAt ? timeAgo(s.resolvedAt) : timeAgo(s.createdAt)}
+                    </div>
                   </div>
-                  <div className="mt-0.5 text-[11px] text-zinc-400">
-                    {timeAgo(r.createdAt)}
+                </li>
+              ))}
+              {reports.map((r) => (
+                <li key={r.id} className="flex items-center justify-between gap-3 py-3">
+                  <div className="min-w-0">
+                    <div className="truncate text-[14px] text-zinc-900">{r.stationName}</div>
+                    <div className="mt-0.5 font-mono text-[11px] text-zinc-500">
+                      {r.pricePerGallon !== null
+                        ? `$${r.pricePerGallon.toFixed(2)}/gal`
+                        : "no price"}
+                    </div>
                   </div>
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
+                  <div className="text-right">
+                    <div className="font-mono text-[14px] text-emerald-600">
+                      +${(r.payoutAmountUsdc ?? 0).toFixed(3)} USDC
+                    </div>
+                    <div className="mt-0.5 text-[11px] text-zinc-400">
+                      {timeAgo(r.createdAt)}
+                    </div>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          );
+        })()}
 
         <div className="relative mt-6">
           <button
