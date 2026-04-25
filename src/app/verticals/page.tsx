@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { ConnectButton } from "@/components/ConnectButton";
+import { LiveTxCounter } from "@/components/LiveTxCounter";
 import { Wordmark } from "@/components/Wordmark";
 
 type Row = { name: string; sub: string; price: string };
@@ -174,6 +175,10 @@ export default function VerticalsPage() {
           <Link href="/verticals" className="font-medium text-zinc-900">
             Verticals
           </Link>
+          <Link href="/stats" className="hover:text-zinc-900">
+            Live
+          </Link>
+          <LiveTxCounter />
           <ConnectButton />
         </nav>
       </header>

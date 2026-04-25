@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePrivy } from "@privy-io/react-auth";
 import { toast } from "sonner";
 import { ConnectButton } from "@/components/ConnectButton";
+import { LiveTxCounter } from "@/components/LiveTxCounter";
 import { Wordmark } from "@/components/Wordmark";
 import { Info, MapPin, Trash2 } from "lucide-react";
 
@@ -314,6 +315,10 @@ export default function SettingsPage() {
           <Link href="/verticals" className="hover:text-zinc-900">
             Verticals
           </Link>
+          <Link href="/stats" className="hover:text-zinc-900">
+            Live
+          </Link>
+          <LiveTxCounter />
           <ConnectButton />
         </nav>
       </header>

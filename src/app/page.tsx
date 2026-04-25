@@ -11,6 +11,7 @@ import {
   cubicBezier,
 } from "framer-motion";
 import { ConnectButton } from "@/components/ConnectButton";
+import { LiveTxCounter } from "@/components/LiveTxCounter";
 import { Wordmark } from "@/components/Wordmark";
 import { UserSync } from "@/components/UserSync";
 import { OpportunityCard } from "@/components/OpportunityCard";
@@ -33,6 +34,10 @@ function Header({ signedIn }: { signedIn: boolean }) {
           <Link href="/verticals" className="hover:text-zinc-900">
             Verticals
           </Link>
+          <Link href="/stats" className="hover:text-zinc-900">
+            Live
+          </Link>
+          <LiveTxCounter />
           <ConnectButton />
         </nav>
       ) : (
