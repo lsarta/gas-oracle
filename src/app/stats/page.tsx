@@ -131,6 +131,15 @@ export default function StatsPage() {
           <Link href="/verticals" className="hover:text-zinc-900">
             Verticals
           </Link>
+          <Link
+            href="/developers"
+            className="inline-flex items-center gap-1.5 hover:text-zinc-900"
+          >
+            Developers
+            <span className="rounded-full bg-emerald-50 px-1.5 py-0.5 font-inter text-[9px] font-medium uppercase tracking-wider text-emerald-700">
+              new
+            </span>
+          </Link>
           <Link href="/stats" className="font-medium text-zinc-900">
             Live
           </Link>
