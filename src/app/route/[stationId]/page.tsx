@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { ConnectButton } from "@/components/ConnectButton";
+import { LiveTxCounter } from "@/components/LiveTxCounter";
 import { Wordmark } from "@/components/Wordmark";
 import { RouteView } from "./RouteView";
 
@@ -25,6 +26,10 @@ export default async function RoutePage({
           <Link href="/map" className="hover:text-zinc-900">
             Map
           </Link>
+          <Link href="/stats" className="hover:text-zinc-900">
+            Live
+          </Link>
+          <LiveTxCounter />
           <ConnectButton />
         </nav>
       </header>
