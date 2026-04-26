@@ -1,0 +1,31 @@
+name: Oracle agent cron
+
+# GitHub Actions free-tier cron has a 5-minute minimum granularity and
+# can be delayed up to ~10 min during peak load. Each run fires ONE
+# paid x402 oracle query against gyasss.com — alternating gas/parking
+# is handled inside the route by epoch-minute parity.
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch: {} # allow manual trigger from the Actions tab
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Hit cron endpoint
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          if [ -z "$CRON_SECRET" ]; then
+            echo "::error::CRON_SECRET is not set as a repo secret"
+            exit 1
+          fi
+          # -f makes curl fail on non-2xx; -sS is silent but shows errors;
+          # -w prints status + timings to stderr for the job log.
+          curl -fsS \
+            -H "Authorization: Bearer $CRON_SECRET" \
+            -w "\nHTTP %{http_code}  ttfb=%{time_starttransfer}s  total=%{time_total}s\n" \
+            "https://www.gyasss.com/api/cron/agent"
