@@ -212,16 +212,28 @@ export default function StatsPage() {
                         >
                           ${e.amountUsdc.toFixed(3)}
                         </span>
-                        {e.txHash && (
+                        {/* arcscan only resolves real on-chain hashes (0x + 64 hex).
+                            Agent-query rows store Circle Gateway batch UUIDs
+                            instead, which arcscan can't look up — render those
+                            as plain mono text so the link isn't broken. */}
+                        {e.txHash && /^0x[0-9a-fA-F]{64}$/.test(e.txHash) ? (
                           <a
                             href={`${ARC_EXPLORER_TX}/${e.txHash}`}
                             target="_blank"
                             rel="noreferrer"
                             className="text-zinc-400 hover:text-zinc-700"
+                            title="View on Arc explorer"
                           >
                             <ExternalLink className="h-3.5 w-3.5" />
                           </a>
-                        )}
+                        ) : e.txHash ? (
+                          <span
+                            className="font-mono text-[10px] text-zinc-400"
+                            title={`Circle batch ID: ${e.txHash}`}
+                          >
+                            batch
+                          </span>
+                        ) : null}
                       </div>
                     </motion.li>
                   );
