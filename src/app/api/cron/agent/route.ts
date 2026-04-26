@@ -5,6 +5,12 @@ import { GatewayClient } from "@circle-fin/x402-batching/client";
 // based on epoch-minute parity. Mirrors scripts/routing-agent.ts but
 // runs on Vercel's schedule instead of a long-lived process.
 
+// Disable Vercel's edge cache for this route. Without this, the CDN can
+// HIT and serve a cached 404 from the brief window before the route was
+// deployed — which masks both manual curl tests and the cron's own calls.
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 const HOST_FALLBACK = "https://www.gyasss.com";
 const GAS_PATH = "/api/oracle/cheapest-gas";
 const PARKING_PATH = "/api/oracle/cheapest-parking";
@@ -59,7 +65,10 @@ function host(req: NextRequest): string {
 
 export async function GET(request: NextRequest) {
   if (!checkAuth(request)) {
-    return Response.json({ error: "unauthorized" }, { status: 401 });
+    return new Response(JSON.stringify({ error: "unauthorized" }), {
+      status: 401,
+      headers: { "Content-Type": "application/json", "Cache-Control": "no-store" },
+    });
   }
 
   const pk = process.env.ROUTING_AGENT_PRIVATE_KEY;
