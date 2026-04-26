@@ -28,6 +28,9 @@ function Header({ signedIn }: { signedIn: boolean }) {
       </Link>
       {signedIn ? (
         <nav className="flex items-center gap-6 text-[14px] text-zinc-700">
+          <Link href="/" className="font-medium text-zinc-900">
+            Home
+          </Link>
           <Link href="/map" className="hover:text-zinc-900">
             Map
           </Link>
