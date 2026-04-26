@@ -34,6 +34,9 @@ function Header({ signedIn }: { signedIn: boolean }) {
           <Link href="/verticals" className="hover:text-zinc-900">
             Verticals
           </Link>
+          <Link href="/stats" className="hover:text-zinc-900">
+            Stats
+          </Link>
           <Link
             href="/developers"
             className="inline-flex items-center gap-1.5 hover:text-zinc-900"
@@ -43,8 +46,8 @@ function Header({ signedIn }: { signedIn: boolean }) {
               new
             </span>
           </Link>
-          <Link href="/stats" className="hover:text-zinc-900">
-            Live
+          <Link href="/pitch" className="hover:text-zinc-900">
+            Pitch
           </Link>
           <LiveTxCounter />
           <ConnectButton />

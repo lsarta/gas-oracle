@@ -204,11 +204,14 @@ export default function DevelopersPage() {
           <Link href="/verticals" className="hover:text-zinc-900">
             Verticals
           </Link>
+          <Link href="/stats" className="hover:text-zinc-900">
+            Stats
+          </Link>
           <Link href="/developers" className="font-medium text-zinc-900">
             Developers
           </Link>
-          <Link href="/stats" className="hover:text-zinc-900">
-            Live
+          <Link href="/pitch" className="hover:text-zinc-900">
+            Pitch
           </Link>
           <LiveTxCounter />
           <ConnectButton />
