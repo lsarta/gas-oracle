@@ -24,9 +24,6 @@ export default function MapPage() {
           <Link href="/map" className="font-medium text-zinc-900">
             Map
           </Link>
-          <Link href="/verticals" className="hover:text-zinc-900">
-            Verticals
-          </Link>
           <Link href="/stats" className="hover:text-zinc-900">
             Stats
           </Link>
