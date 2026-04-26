@@ -10,7 +10,7 @@ export default function ThanksPage() {
   return (
     <div className="fixed inset-0 bg-[#0A0A0A] flex flex-col items-center justify-center px-8">
       <div className="text-center max-w-2xl">
-        <div className="font-mono text-[11px] uppercase tracking-[0.2em] text-zinc-500 mb-12">
+        <div className="font-mono text-[18px] md:text-[22px] uppercase tracking-[0.24em] text-zinc-400 mb-12">
           Thank you
         </div>
 
