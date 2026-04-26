@@ -315,6 +315,9 @@ export default function SettingsPage() {
           <Link href="/verticals" className="hover:text-zinc-900">
             Verticals
           </Link>
+          <Link href="/stats" className="hover:text-zinc-900">
+            Stats
+          </Link>
           <Link
             href="/developers"
             className="inline-flex items-center gap-1.5 hover:text-zinc-900"
@@ -324,8 +327,8 @@ export default function SettingsPage() {
               new
             </span>
           </Link>
-          <Link href="/stats" className="hover:text-zinc-900">
-            Live
+          <Link href="/pitch" className="hover:text-zinc-900">
+            Pitch
           </Link>
           <LiveTxCounter />
           <ConnectButton />

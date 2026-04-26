@@ -26,6 +26,9 @@ export default async function RoutePage({
           <Link href="/map" className="hover:text-zinc-900">
             Map
           </Link>
+          <Link href="/stats" className="hover:text-zinc-900">
+            Stats
+          </Link>
           <Link
             href="/developers"
             className="inline-flex items-center gap-1.5 hover:text-zinc-900"
@@ -35,8 +38,8 @@ export default async function RoutePage({
               new
             </span>
           </Link>
-          <Link href="/stats" className="hover:text-zinc-900">
-            Live
+          <Link href="/pitch" className="hover:text-zinc-900">
+            Pitch
           </Link>
           <LiveTxCounter />
           <ConnectButton />
