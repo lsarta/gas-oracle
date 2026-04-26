@@ -312,9 +312,6 @@ export default function SettingsPage() {
           <Link href="/map" className="hover:text-zinc-900">
             Map
           </Link>
-          <Link href="/verticals" className="hover:text-zinc-900">
-            Verticals
-          </Link>
           <Link href="/stats" className="hover:text-zinc-900">
             Stats
           </Link>
