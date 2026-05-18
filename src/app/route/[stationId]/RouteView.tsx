@@ -114,7 +114,7 @@ function buildEndpointMarker(color: string): HTMLElement {
 
 export function RouteView({ stationId }: { stationId: string }) {
   const router = useRouter();
-  const { user } = usePrivy();
+  const { ready, authenticated, user } = usePrivy();
   const wallet = user?.wallet?.address;
 
   const [rec, setRec] = useState<Recommendation | null>(null);
@@ -151,9 +151,23 @@ export function RouteView({ stationId }: { stationId: string }) {
     }
   }, [wallet]);
 
+  // Don't fire fetchData until Privy has hydrated AND the wallet address is
+  // available. Privy flips `authenticated` to true a render or two before
+  // `user.wallet.address` is set; firing early would issue an anonymous
+  // /api/opportunity call that returns reason='set_locations'. If that
+  // anonymous response races the later wallet-scoped response (server
+  // cache makes either possible), the late anonymous setRec(null) wipes
+  // out the real recommendation — the user then sees no route until a
+  // refresh repopulates from cache.
   useEffect(() => {
+    if (!ready) return;
+    if (!authenticated) {
+      setLoaded(true);
+      return;
+    }
+    if (!wallet) return;
     fetchData();
-  }, [fetchData]);
+  }, [ready, authenticated, wallet, fetchData]);
 
   // Slide the panel in on mount.
   useEffect(() => {
@@ -283,8 +297,14 @@ export function RouteView({ stationId }: { stationId: string }) {
         try {
           if (!mapRef.current) return;
           if (coords.length < 2) return;
-          if (!map.isStyleLoaded()) {
-            map.once("style.load", addRouteLayer);
+          // Use `map.loaded()` + `map.once("load", ...)` rather than the
+          // internal `style.load` event. `style.load` fires on every style
+          // mutation and can race against `isStyleLoaded()`, occasionally
+          // leaving us with a registered listener that never fires (route
+          // line never drawn → user has to refresh). `load` is the canonical
+          // "map is ready for sources/layers" event and is idempotent.
+          if (!map.loaded()) {
+            map.once("load", addRouteLayer);
             return;
           }
           if (!map.getSource("route")) {

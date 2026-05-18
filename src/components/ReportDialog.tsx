@@ -34,7 +34,12 @@ type StationLite = {
   activeBounty: number;
   requiresStake: boolean;
   stakeAmount: number;
+  currentPricePerGallon: number | null;
 };
+
+const DEFAULT_GALLONS = 12.4;
+// Used when a station has no current price yet (rare); rough SF mid-range.
+const FALLBACK_PRICE_PER_GAL = 6.0;
 
 const ARC_EXPLORER_TX = "https://testnet.arcscan.app/tx";
 const AUTO_CLOSE_MS = 4000;
@@ -100,8 +105,12 @@ export function ReportDialog({
   const wallet = user?.wallet?.address;
 
   const [station, setStation] = useState<StationLite | null>(null);
-  const [amount, setAmount] = useState("42.18");
-  const [gallons, setGallons] = useState("12.4");
+  const [amount, setAmount] = useState("");
+  const [gallons, setGallons] = useState(String(DEFAULT_GALLONS));
+  // Tracks whether the user has manually touched the inputs; once true we
+  // stop overwriting with the auto-fill on station load. Without this, a
+  // late /api/stations response could clobber a value the user just typed.
+  const [userEdited, setUserEdited] = useState(false);
   const [stage, setStage] = useState<Stage>("form");
   const [result, setResult] = useState<{
     payoutAmountUsdc: number;
@@ -117,6 +126,13 @@ export function ReportDialog({
     setStage("form");
     setResult(null);
     setErrorMsg(null);
+    // Reset the edited-flag and clear amount so the next station's auto-fill
+    // takes effect. Gallons keeps its default so the implied-price math has
+    // a divisor while we wait for the station fetch.
+    setUserEdited(false);
+    setAmount("");
+    setGallons(String(DEFAULT_GALLONS));
+    setStation(null);
   }, [isOpen, stationId]);
 
   useEffect(() => {
@@ -132,6 +148,7 @@ export function ReportDialog({
           activeBounty?: number;
           requiresStake?: boolean;
           stakeAmount?: number;
+          currentPricePerGallon?: number | null;
         };
         const s = (j.stations as RichStation[]).find((x) => x.id === stationId);
         setStation(
@@ -142,6 +159,10 @@ export function ReportDialog({
                 activeBounty: Number(s.activeBounty ?? 0),
                 requiresStake: Boolean(s.requiresStake),
                 stakeAmount: Number(s.stakeAmount ?? 0),
+                currentPricePerGallon:
+                  s.currentPricePerGallon !== null && s.currentPricePerGallon !== undefined
+                    ? Number(s.currentPricePerGallon)
+                    : null,
               }
             : null,
         );
@@ -151,6 +172,17 @@ export function ReportDialog({
       aborted = true;
     };
   }, [stationId]);
+
+  // Auto-fill the amount field from the station's current price × default
+  // gallons once the station data lands. Skipped if the user has already
+  // typed in the form.
+  useEffect(() => {
+    if (userEdited) return;
+    if (!station) return;
+    const pricePerGal = station.currentPricePerGallon ?? FALLBACK_PRICE_PER_GAL;
+    const suggested = pricePerGal * DEFAULT_GALLONS;
+    setAmount(suggested.toFixed(2));
+  }, [station, userEdited]);
 
   const amountNum = Number(amount);
   const gallonsNum = Number(gallons);
@@ -284,7 +316,10 @@ export function ReportDialog({
                     id="amount"
                     inputMode="decimal"
                     value={amount}
-                    onChange={(e) => setAmount(e.target.value)}
+                    onChange={(e) => {
+                      setAmount(e.target.value);
+                      setUserEdited(true);
+                    }}
                     className="h-12 w-full rounded-lg border border-zinc-200 bg-white pl-8 pr-4 font-mono text-[18px] text-zinc-900 outline-none transition-colors focus:border-emerald-600 focus:ring-2 focus:ring-emerald-600/20"
                   />
                 </div>
@@ -301,7 +336,10 @@ export function ReportDialog({
                   id="gallons"
                   inputMode="decimal"
                   value={gallons}
-                  onChange={(e) => setGallons(e.target.value)}
+                  onChange={(e) => {
+                    setGallons(e.target.value);
+                    setUserEdited(true);
+                  }}
                   className="h-12 w-full rounded-lg border border-zinc-200 bg-white px-4 font-mono text-[18px] text-zinc-900 outline-none transition-colors focus:border-emerald-600 focus:ring-2 focus:ring-emerald-600/20"
                 />
               </div>
