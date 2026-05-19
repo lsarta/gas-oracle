@@ -147,7 +147,8 @@ export default function StatsPage() {
           Live activity
         </h1>
         <p className="mt-2 text-[14px] text-zinc-500">
-          All transactions on Arc Testnet, settled in USDC. Updated every 5 seconds.
+          Instant x402 authorization on Arc Testnet, settled in gasless USDC
+          batches via Circle Gateway. Updated every 5 seconds.
         </p>
 
         <section className="mt-8 grid grid-cols-2 gap-4 lg:grid-cols-4">
@@ -229,7 +230,7 @@ export default function StatsPage() {
                         ) : e.txHash ? (
                           <span
                             className="font-mono text-[10px] text-zinc-400"
-                            title={`Circle batch ID: ${e.txHash}`}
+                            title={`Settled in a Circle Gateway batch (≈ every 2 min on Arc Testnet). Batch ID: ${e.txHash}`}
                           >
                             batch
                           </span>
