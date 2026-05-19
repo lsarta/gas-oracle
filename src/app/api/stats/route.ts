@@ -53,7 +53,7 @@ async function compute(): Promise<Stats> {
       reportsVol24h,
       oqVolAll,
       reportsVolAll,
-      oqRate5m,
+      oqRate15m,
       walletsCount,
     ] = await Promise.all([
       client.query<{ n: string }>(
@@ -84,8 +84,12 @@ async function compute(): Promise<Stats> {
         `SELECT COALESCE(SUM(payout_amount_usdc), 0) AS s FROM reports`,
       ),
       client.query<{ n: string }>(
+        // 15-min window smooths over GitHub Actions cron jitter — the
+        // `*/5` schedule frequently skips top-of-hour ticks under load,
+        // which made the 5-min window read 0.0/min for stretches even
+        // when the agent was healthy.
         `SELECT COUNT(*) AS n FROM oracle_queries
-           WHERE created_at > now() - interval '5 minutes'`,
+           WHERE created_at > now() - interval '15 minutes'`,
       ),
       client.query<{ n: string }>(
         `SELECT COUNT(DISTINCT wallet) AS n FROM (
@@ -103,7 +107,7 @@ async function compute(): Promise<Stats> {
       Number(oqVol24h.rows[0].s ?? 0) + Number(reportsVol24h.rows[0].s ?? 0);
     const totalUsdcVolumeAllTime =
       Number(oqVolAll.rows[0].s ?? 0) + Number(reportsVolAll.rows[0].s ?? 0);
-    const agentQueryRatePerMinute = Number(oqRate5m.rows[0].n) / 5;
+    const agentQueryRatePerMinute = Number(oqRate15m.rows[0].n) / 15;
     const uniqueWalletsLast24h = Number(walletsCount.rows[0].n);
 
     return {
