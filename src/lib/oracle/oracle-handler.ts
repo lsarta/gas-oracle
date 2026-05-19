@@ -52,7 +52,11 @@ function buildRequirements() {
     asset: USDC_ADDRESS_ARC_TESTNET,
     amount: PRICE_ATOMIC,
     payTo: payTo(),
-    maxTimeoutSeconds: 345600,
+    // Circle's testnet facilitator rejects shorter windows as
+    // authorization_validity_too_short. The SDK clamps the client to
+    // Math.max(server, SDK_MIN=7d), so publishing 14d forces the signed
+    // window past the facilitator's threshold.
+    maxTimeoutSeconds: 14 * 24 * 60 * 60,
     extra: {
       name: "GatewayWalletBatched",
       version: "1",
