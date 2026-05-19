@@ -145,6 +145,9 @@ export function createOracleHandler(config: OracleHandlerConfig) {
 
     const verifyResult = await facilitator.verify(paymentPayload, requirements);
     if (!verifyResult.isValid) {
+      console.error(
+        `[oracle-handler] verify failed: reason=${verifyResult.invalidReason} payer=${verifyResult.payer ?? "?"} url=${request.nextUrl.toString()}`,
+      );
       return new Response(
         JSON.stringify({
           error: "Payment verification failed",
