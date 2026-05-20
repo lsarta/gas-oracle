@@ -20,7 +20,8 @@
     "test:stakes": "tsx --env-file=.env.local scripts/test-stakes.ts",
     "db:check-users": "tsx --env-file=.env.local scripts/db-check-users.ts",
     "db:check-queries": "tsx --env-file=.env.local scripts/db-check-queries.ts",
-    "agent:run": "tsx --env-file=.env.local scripts/routing-agent.ts"
+    "agent:run": "tsx --env-file=.env.local scripts/routing-agent.ts",
+    "warmup": "tsx --env-file=.env.local scripts/warmup-demo.ts"
   },
   "dependencies": {
     "@base-ui/react": "^1.4.1",
