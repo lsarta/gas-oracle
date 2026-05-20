@@ -89,7 +89,16 @@ function ActivityIcon({ kind }: { kind: ActivityKind }) {
 export default function StatsPage() {
   const [stats, setStats] = useState<Stats | null>(null);
   const [activity, setActivity] = useState<ActivityRow[]>([]);
+  // IDs we've ever observed — informational, written from `load`, never read
+  // during render. The fade-in trigger comes from `newIds` (state) instead.
   const seenIdsRef = useRef<Set<string>>(new Set());
+  const firstLoadRef = useRef(true);
+  // IDs that appeared in the most recent poll. Drives motion.li's `initial`
+  // animation. Reading state (not ref) during render keeps the React 19
+  // compiler happy and ensures the animation actually fires — the previous
+  // implementation marked every fetched id "seen" inside `load` before
+  // React re-rendered, so the ref check at render time was always false.
+  const [newIds, setNewIds] = useState<Set<string>>(new Set());
 
   const load = useCallback(async () => {
     try {
@@ -99,11 +108,22 @@ export default function StatsPage() {
       ]);
       const sj = (await s.json()) as Stats;
       const aj = (await a.json()) as { activity: ActivityRow[] };
+
+      // Compute new ids BEFORE merging into the seen set. Skip on the very
+      // first load so the initial batch doesn't all animate in at once
+      // (mirrors the AnimatePresence `initial={false}` intent below).
+      const fresh = new Set<string>();
+      if (!firstLoadRef.current) {
+        for (const r of aj.activity) {
+          if (!seenIdsRef.current.has(r.id)) fresh.add(r.id);
+        }
+      }
+      for (const r of aj.activity) seenIdsRef.current.add(r.id);
+      firstLoadRef.current = false;
+
       setStats(sj);
       setActivity(aj.activity);
-      // Track which ids we've ever seen so the fade-in only fires for the
-      // genuinely-new ones on subsequent polls.
-      aj.activity.forEach((r) => seenIdsRef.current.add(r.id));
+      setNewIds(fresh);
     } catch {
       /* keep last */
     }
@@ -185,7 +205,7 @@ export default function StatsPage() {
             <ul className="mt-4 divide-y divide-zinc-100">
               <AnimatePresence initial={false}>
                 {activity.map((e) => {
-                  const isNew = !seenIdsRef.current.has(e.id);
+                  const isNew = newIds.has(e.id);
                   return (
                     <motion.li
                       key={e.id}
