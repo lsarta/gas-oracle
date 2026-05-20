@@ -36,7 +36,9 @@ async function main() {
 
   // Best-effort: find a "gateway available" figure across plausible shapes.
   const gatewayAvailableUsdc = (() => {
-    const b = balances as Record<string, unknown>;
+    // Bridge through `unknown` — Balances is a concrete SDK type that
+    // doesn't structurally overlap with Record<string, unknown> under strict.
+    const b = balances as unknown as Record<string, unknown>;
     const gateway = b?.gateway as Record<string, unknown> | undefined;
     const candidates: unknown[] = [
       (gateway?.available as Record<string, unknown> | undefined)?.formatted,
