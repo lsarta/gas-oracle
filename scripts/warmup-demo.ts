@@ -17,6 +17,7 @@
  */
 import { parseArgs } from "node:util";
 import { GatewayClient } from "@circle-fin/x402-batching/client";
+import { ensureGatewayBalance } from "./_gateway-balance";
 
 const DEFAULT_HOST = "https://www.gyasss.com";
 const DEFAULT_COUNT = 5;
@@ -104,15 +105,6 @@ async function main() {
   }
   const vertical: Vertical = verticalRaw;
 
-  const pk = process.env[secretEnv];
-  if (!pk) {
-    console.error(`[warmup] env var "${secretEnv}" is not set.`);
-    console.error(
-      `         Define it in .env.local, or pass a different name with --secret-env <NAME>.`,
-    );
-    process.exit(2);
-  }
-
   const totalCostUsdc =
     Math.round(count * COST_PER_TICK_USDC * 1_000_000) / 1_000_000;
   const durationS = count * intervalSec;
@@ -134,11 +126,22 @@ async function main() {
       `note            count=${count} > ${COUNT_CAUTION_THRESHOLD}; ensure this matches a plausible organic burst`,
     );
   }
+
+  // Dry-run short-circuit BEFORE the secret check — operators rehearsing
+  // a plan don't need a live signing key to see the plan.
   if (dryRun) {
     console.log(`\n--dry-run set; exiting without firing.`);
     return;
   }
-  console.log("");
+
+  const pk = process.env[secretEnv];
+  if (!pk) {
+    console.error(`\n[warmup] env var "${secretEnv}" is not set.`);
+    console.error(
+      `         Define it in .env.local, or pass a different name with --secret-env <NAME>.`,
+    );
+    process.exit(2);
+  }
 
   let interrupted = false;
   process.on("SIGINT", () => {
@@ -149,6 +152,23 @@ async function main() {
     chain: "arcTestnet",
     privateKey: pk as `0x${string}`,
   });
+
+  // Pre-flight: ensure Gateway has enough balance to cover the burst. If
+  // below threshold, deposit. Failures here are fatal — the operator
+  // should see a clear message rather than discover failed ticks one by one.
+  try {
+    const { available, deposited } = await ensureGatewayBalance(client);
+    const balanceLabel = Number.isFinite(available)
+      ? `$${available.toFixed(3)} USDC`
+      : "balance unknown";
+    console.log(
+      `gateway         ${balanceLabel}${deposited ? " (topped up)" : " (sufficient)"}`,
+    );
+  } catch (e) {
+    console.error(`\n[warmup] ${e instanceof Error ? e.message : e}`);
+    process.exit(2);
+  }
+  console.log("");
 
   let ok = 0;
   let fail = 0;

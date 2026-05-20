@@ -1,33 +1,16 @@
 import { GatewayClient } from "@circle-fin/x402-batching/client";
+import { ensureGatewayBalance } from "./_gateway-balance";
 
 const ORACLE_HOST = process.env.ORACLE_HOST ?? "http://localhost:3000";
 const GAS_PATH = "/api/oracle/cheapest-gas";
 const PARKING_PATH = "/api/oracle/cheapest-parking";
 const QUERY_INTERVAL_MS = 5000;
-const MIN_GATEWAY_BALANCE_USDC = 0.1;
-const DEPOSIT_AMOUNT_USDC = "0.5";
 const SF_LAT = 37.7749;
 const SF_LNG = -122.4194;
 const JITTER = 0.02;
 
 function ts() {
   return new Date().toTimeString().slice(0, 8);
-}
-
-function gatewayAvailable(b: unknown): number {
-  const x = b as Record<string, unknown>;
-  const gateway = x?.gateway as Record<string, unknown> | undefined;
-  const candidates: unknown[] = [
-    (gateway?.available as Record<string, unknown> | undefined)?.formatted,
-    gateway?.availableFormatted,
-    (x?.gatewayAvailable as Record<string, unknown> | undefined)?.formatted,
-    (x?.available as Record<string, unknown> | undefined)?.formatted,
-  ];
-  for (const c of candidates) {
-    const n = Number(c);
-    if (Number.isFinite(n)) return n;
-  }
-  return Number.NaN;
 }
 
 type GasResp = {
@@ -45,19 +28,13 @@ async function main() {
 
   const client = new GatewayClient({ chain: "arcTestnet", privateKey: pk as `0x${string}` });
 
-  const balances = await client.getBalances();
-  const available = gatewayAvailable(balances);
-
   console.log("=".repeat(64));
   console.log("Gyas routing agent (gas + parking)");
   console.log(`Address:         ${client.address}`);
-  console.log(`Gateway balance: ${Number.isFinite(available) ? `${available} USDC` : "(unparsed)"}`);
 
-  if (!Number.isFinite(available) || available < MIN_GATEWAY_BALANCE_USDC) {
-    console.log(`Depositing ${DEPOSIT_AMOUNT_USDC} USDC into Gateway...`);
-    await client.deposit(DEPOSIT_AMOUNT_USDC);
-    console.log("Deposit confirmed.");
-  }
+  const { available, deposited } = await ensureGatewayBalance(client);
+  const balanceLabel = Number.isFinite(available) ? `${available} USDC` : "(unparsed)";
+  console.log(`Gateway balance: ${balanceLabel}${deposited ? " (topped up)" : ""}`);
 
   console.log(`Querying alternating gas/parking oracles every ${QUERY_INTERVAL_MS / 1000}s...`);
   console.log("=".repeat(64));
