@@ -12,6 +12,7 @@ type Location = {
   address: string;
   currentHourlyRate: number | null;
   freshness: string;
+  lastPricedAt: string | null;
 };
 
 const CURL_EXAMPLE = `curl -X GET "https://www.gyasss.com/api/oracle/cheapest-parking?lat=37.7749&lng=-122.4194&radiusMinutes=10" \\
@@ -19,14 +20,22 @@ const CURL_EXAMPLE = `curl -X GET "https://www.gyasss.com/api/oracle/cheapest-pa
 # Returns 402 PAYMENT-REQUIRED on first call.
 # Pay $0.001 USDC on Arc, then retry. Same protocol as cheapest-gas.`;
 
-function freshnessClasses(label: string): string {
-  if (label.endsWith("m ago") || label === "just now") return "bg-emerald-50 text-emerald-700";
-  if (label.endsWith("h ago")) {
-    const hours = parseInt(label, 10);
-    if (Number.isFinite(hours) && hours < 6) return "bg-emerald-50 text-emerald-700";
-    if (Number.isFinite(hours) && hours < 12) return "bg-amber-50 text-amber-700";
-  }
-  return "bg-red-50 text-red-700";
+function ageHours(iso: string | null): number | null {
+  if (!iso) return null;
+  const ms = Date.now() - new Date(iso).getTime();
+  return ms / 3_600_000;
+}
+
+function freshnessClasses(hours: number | null): string {
+  if (hours === null) return "bg-zinc-100 text-zinc-600";
+  if (hours < 1) return "bg-emerald-50 text-emerald-700";
+  if (hours < 6) return "bg-emerald-50 text-emerald-700";
+  if (hours < 12) return "bg-amber-50 text-amber-700";
+  return "bg-amber-100 text-amber-800";
+}
+
+function isStale(hours: number | null): boolean {
+  return hours !== null && hours >= 12;
 }
 
 export default function ParkingPage() {
@@ -94,30 +103,41 @@ export default function ParkingPage() {
           <p className="text-[14px] text-zinc-500">No parking locations yet.</p>
         ) : (
           <ul className="space-y-3">
-            {locations.map((l) => (
-              <li
-                key={l.id}
-                className="flex items-center justify-between gap-4 rounded-xl border border-zinc-200 bg-white p-5"
-              >
-                <div className="min-w-0">
-                  <div className="text-[16px] font-medium text-zinc-900">{l.name}</div>
-                  <div className="mt-0.5 text-[13px] text-zinc-500">{l.address}</div>
-                </div>
-                <div className="flex flex-col items-end gap-1">
-                  <div className="font-mono text-[24px] font-medium leading-none tracking-tight text-zinc-900">
-                    {l.currentHourlyRate !== null ? `$${l.currentHourlyRate.toFixed(2)}` : "—"}
-                    <span className="ml-1 font-inter text-[12px] font-normal text-zinc-500">
-                      /hr
+            {locations.map((l) => {
+              const hrs = ageHours(l.lastPricedAt);
+              const stale = isStale(hrs);
+              return (
+                <li
+                  key={l.id}
+                  className={`flex items-center justify-between gap-4 rounded-xl border p-5 ${stale ? "border-amber-200 bg-amber-50/40" : "border-zinc-200 bg-white"}`}
+                >
+                  <div className="min-w-0">
+                    <div className="text-[16px] font-medium text-zinc-900">{l.name}</div>
+                    <div className="mt-0.5 text-[13px] text-zinc-500">{l.address}</div>
+                    {stale && (
+                      <div className="mt-2 text-[12px] text-amber-800">
+                        Last updated {l.freshness} — bounty available for the next reporter.
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex flex-col items-end gap-1">
+                    <div
+                      className={`font-mono text-[24px] font-medium leading-none tracking-tight ${stale ? "text-zinc-500" : "text-zinc-900"}`}
+                    >
+                      {l.currentHourlyRate !== null ? `$${l.currentHourlyRate.toFixed(2)}` : "—"}
+                      <span className="ml-1 font-inter text-[12px] font-normal text-zinc-500">
+                        /hr
+                      </span>
+                    </div>
+                    <span
+                      className={`rounded-full px-2 py-0.5 font-inter text-[10px] font-medium uppercase tracking-wider ${freshnessClasses(hrs)}`}
+                    >
+                      {stale ? `Stale · ${l.freshness}` : l.freshness}
                     </span>
                   </div>
-                  <span
-                    className={`rounded-full px-2 py-0.5 font-inter text-[10px] font-medium uppercase tracking-wider ${freshnessClasses(l.freshness)}`}
-                  >
-                    {l.freshness}
-                  </span>
-                </div>
-              </li>
-            ))}
+                </li>
+              );
+            })}
           </ul>
         )}
 
