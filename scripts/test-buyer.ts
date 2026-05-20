@@ -36,12 +36,13 @@ async function main() {
 
   // Best-effort: find a "gateway available" figure across plausible shapes.
   const gatewayAvailableUsdc = (() => {
-    const b: any = balances;
-    const candidates = [
-      b?.gateway?.available?.formatted,
-      b?.gateway?.availableFormatted,
-      b?.gatewayAvailable?.formatted,
-      b?.available?.formatted,
+    const b = balances as Record<string, unknown>;
+    const gateway = b?.gateway as Record<string, unknown> | undefined;
+    const candidates: unknown[] = [
+      (gateway?.available as Record<string, unknown> | undefined)?.formatted,
+      gateway?.availableFormatted,
+      (b?.gatewayAvailable as Record<string, unknown> | undefined)?.formatted,
+      (b?.available as Record<string, unknown> | undefined)?.formatted,
     ];
     for (const c of candidates) {
       const n = Number(c);
@@ -70,7 +71,7 @@ async function main() {
   });
 
   await step("Step 5: response + updated balances", async () => {
-    const r: any = payResult;
+    const r = payResult as { status?: unknown; data?: unknown };
     console.log(`status: ${r?.status ?? "(no status field)"}`);
     console.log("response body:");
     console.log(fmt(r?.data ?? r));

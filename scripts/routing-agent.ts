@@ -15,12 +15,13 @@ function ts() {
 }
 
 function gatewayAvailable(b: unknown): number {
-  const x = b as Record<string, any>;
-  const candidates = [
-    x?.gateway?.available?.formatted,
-    x?.gateway?.availableFormatted,
-    x?.gatewayAvailable?.formatted,
-    x?.available?.formatted,
+  const x = b as Record<string, unknown>;
+  const gateway = x?.gateway as Record<string, unknown> | undefined;
+  const candidates: unknown[] = [
+    (gateway?.available as Record<string, unknown> | undefined)?.formatted,
+    gateway?.availableFormatted,
+    (x?.gatewayAvailable as Record<string, unknown> | undefined)?.formatted,
+    (x?.available as Record<string, unknown> | undefined)?.formatted,
   ];
   for (const c of candidates) {
     const n = Number(c);

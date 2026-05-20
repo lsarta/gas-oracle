@@ -23,7 +23,16 @@ async function main() {
     "/test-paid-endpoint",
     gateway.require("$0.001") as express.RequestHandler,
     (req: express.Request, res: express.Response) => {
-      const payment = (req as any).payment;
+      // Express middleware attaches `payment` to the request; cast through
+      // unknown since we don't own the @circle-fin Express type extension.
+      const payment = (req as unknown as {
+        payment?: {
+          payer?: string;
+          amount?: string;
+          network?: string;
+          transaction?: string;
+        };
+      }).payment;
       console.log(
         `[paid] payer=${payment?.payer} amount=${payment?.amount} network=${payment?.network} tx=${payment?.transaction ?? "n/a"}`,
       );
