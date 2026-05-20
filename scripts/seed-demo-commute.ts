@@ -18,7 +18,11 @@ const COMMUTE = {
 const BARGAIN = {
   address: "1395 Bryant St, San Francisco",
   price: 4.39,
-  hoursAgo: 0.08, // ~5 min
+  // 7h ago lands in the $0.15 freshness-payout bracket (6h–12h) for a
+  // demo-visible cashback. Pairs with high confidence so the 6h+
+  // medium-bounty / stake gate stays off (bounty only triggers when
+  // confidence is 'low' or null in this age range).
+  hoursAgo: 7,
   confidence: "high" as const,
   reportCount: 3,
 };

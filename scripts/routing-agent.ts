@@ -1,6 +1,6 @@
 import { GatewayClient } from "@circle-fin/x402-batching/client";
 
-const ORACLE_HOST = "http://localhost:3000";
+const ORACLE_HOST = process.env.ORACLE_HOST ?? "http://localhost:3000";
 const GAS_PATH = "/api/oracle/cheapest-gas";
 const PARKING_PATH = "/api/oracle/cheapest-parking";
 const QUERY_INTERVAL_MS = 5000;
