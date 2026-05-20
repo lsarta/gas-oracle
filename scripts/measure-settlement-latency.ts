@@ -29,12 +29,14 @@ const TRANSFER_EVENT = parseAbiItem(
 
 // Arc Testnet RPC limits eth_getLogs to a 10K block range.
 // At ~1s blocks that's about 2.7 hours. Plenty for our purposes.
-const BLOCK_LOOKBACK = 9_999n;
+// BigInt(...) instead of `9_999n` literal syntax — tsconfig targets ES2017,
+// where the `n` suffix isn't available. Same value, no runtime difference.
+const BLOCK_LOOKBACK = BigInt(9999);
 
 async function main() {
   const rpc = createPublicClient({ chain: arcTestnet, transport: http() });
   const head = await rpc.getBlockNumber();
-  const fromBlock = head > BLOCK_LOOKBACK ? head - BLOCK_LOOKBACK : 0n;
+  const fromBlock = head > BLOCK_LOOKBACK ? head - BLOCK_LOOKBACK : BigInt(0);
   console.log(`Arc head: ${head}  fetching from block ${fromBlock} (~last few hours)`);
 
   // 1) Fetch ALL USDC Transfer events whose `to` is the master wallet over

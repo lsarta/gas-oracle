@@ -98,5 +98,5 @@ the Gateway balance if needed. Required env vars: `ROUTING_AGENT_PRIVATE_KEY`.
 | `cleanup-test-data.ts` | Remove rows from `test-*.ts` runs (different wallet pattern than demo seeds) |
 | `check-balances.ts` | Read master + routing-agent USDC balances on Arc |
 | `probe-master-wallet.ts` | Scan recent USDC transfers in/out of master wallet |
-| `seed-demo-commute.ts` | (Legacy) older Steuart→MindsDB commute demo. Superseded by `seed-demo-state.ts`. |
+| `seed-demo-commute.ts` | Focused seeder for the Pacific Heights → 345 California commute: pins Valero @ 1798 Bush St ($5.85) as the on-route bargain and floors neighbors above it. Narrower than `seed-demo-state.ts` (touches only stations + an optional wallet's home/work). The two scripts agree on the same demo narrative. |
 | `seed-consensus-demo.ts` | Seed a specific outlier-resistant consensus scenario for the trust-layer demo segment |

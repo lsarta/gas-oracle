@@ -28,7 +28,7 @@ async function main() {
     address: USDC as `0x${string}`,
     event: TRANSFER_EVENT,
     args: { from: MASTER as `0x${string}` },
-    fromBlock: head - 9_999n,
+    fromBlock: head - BigInt(9999),
     toBlock: head,
   });
   console.log(`  ${outLogs.length} outgoing transfers`);
@@ -41,12 +41,12 @@ async function main() {
 
   // 2) Walk backward in 10K-block chunks looking for ANY incoming USDC transfer
   console.log(`\nWalking backward 10K blocks at a time looking for any incoming USDC…`);
-  const CHUNK = 9_999n;
+  const CHUNK = BigInt(9999);
   let cursor = head;
   let totalChunks = 0;
   let firstFound = false;
-  while (cursor > 0n && totalChunks < 20) {
-    const fromBlock = cursor > CHUNK ? cursor - CHUNK : 0n;
+  while (cursor > BigInt(0) && totalChunks < 20) {
+    const fromBlock = cursor > CHUNK ? cursor - CHUNK : BigInt(0);
     const logs = await rpc.getLogs({
       address: USDC as `0x${string}`,
       event: TRANSFER_EVENT,
@@ -68,7 +68,7 @@ async function main() {
     } else {
       console.log(`  · no transfers in blocks ${fromBlock}–${cursor} (~${((Number(cursor - fromBlock)) / 60).toFixed(0)}m back)`);
     }
-    cursor = fromBlock - 1n;
+    cursor = fromBlock - BigInt(1);
   }
   if (!firstFound) {
     console.log(`\nNo incoming USDC transfers found in the last ${totalChunks * 10000} blocks.`);

@@ -117,7 +117,12 @@ can:
 1. Stake a report at a stale station
 2. Submit two follow-up reports themselves with prices close to the staked
    price (free with auth bypass; ~$0 with real auth at this scale)
-3. Mini-consensus passes → confirm → master pays stake + bounty
+3. Mini-consensus passes → confirm → master pays the bounty
+
+(Branch state, post the corroboration-only refactor: confirm pays the bounty
+only, not stake + bounty. The exploit still drains the bounty per cycle;
+introducing real escrow later would add the stake back to the at-risk
+amount.)
 
 Fix: after P0 lands, also gate the *follow-up* reports — require N reports
 from distinct wallets before a stake resolves, OR exclude reports from the
