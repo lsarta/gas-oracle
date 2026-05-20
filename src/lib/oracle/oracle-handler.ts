@@ -305,7 +305,19 @@ export function createOracleHandler(config: OracleHandlerConfig) {
         },
       });
     } finally {
-      await client.end();
+      // Never let a teardown failure override an already-prepared response.
+      // If client.end() rejects after settle succeeded, the agent has been
+      // billed and the response object is built — re-throwing would convert
+      // that 200 into a 500 and reintroduce "agent paid but got an error."
+      // Best effort: log and move on; a leaked connection is recoverable,
+      // a denied paid response is not.
+      try {
+        await client.end();
+      } catch (err) {
+        console.error(
+          `[oracle-handler] client.end() failed; connection leaked but response unaffected: ${err instanceof Error ? err.message : err}`,
+        );
+      }
     }
   };
 }
