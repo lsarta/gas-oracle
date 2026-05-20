@@ -169,6 +169,24 @@ verifies the token, also confirm `token.privyUserId === body.privyUserId`
 and `token.embeddedWalletAddress === body.walletAddress` (or just drop both
 body fields and derive from token).
 
+### 2.9 Cron route over-deposits every tick
+
+`src/app/api/cron/agent/route.ts` has its own inline copy of the
+`gatewayAvailable()` helper with the same broken candidate list that
+`scripts/routing-agent.ts` had before the warmup follow-up. The SDK 3.0.4
+shape (`gateway.formattedAvailable`) isn't in the candidate list, so the
+function returns NaN, which makes `!Number.isFinite(available)` fire and
+triggers a 0.5 USDC deposit every cron tick (every ~5 min). The wallet's
+real balance is fine and the deposit is idempotent / cheap on testnet, so
+this is **not urgent** — but it adds onchain noise.
+
+Fix: replace the inline helper with an import from a shared module. Since
+P0 will already be touching this file to swap body-wallet auth for Privy
+DID-derived auth, fold the helper migration into that same diff. The
+shared module is `scripts/_gateway-balance.ts` today; if P0 introduces a
+`src/lib/x402/balance.ts`, move it there and re-import from both
+locations.
+
 ### 2.8 Outlier-detection bypass on freshness-payout farming
 
 Related to 2.2. The freshness payout (`computeFreshnessPayout`) gives full
