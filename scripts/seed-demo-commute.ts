@@ -1,23 +1,26 @@
 import { createClient } from "@vercel/postgres";
 
-// Demo: drive from 1 Steuart St (Embarcadero) to MindsDB
-// (3154 17th St, Mission). Route is ~3 mi southwest through SoMa.
+// Demo: drive from 2398 Pacific Ave (Pacific Heights) to 345 California
+// St (Financial District). Route is ~2 mi east, mostly downhill through
+// Russian Hill / Nob Hill.
 //
-// We make Shell at 1395 Bryant St the bargain. It sits well on the
-// SoMa segment of that route — a real "cheaper gas DURING your
-// commute" story, not just "near your destination."
+// We make Valero at 1798 Bush St ($5.85) the bargain. It sits on the
+// early Pac Heights segment of that route — a real "cheaper gas DURING
+// your commute" story, and the station + price match the recorded
+// voiceover plus the DEMO config in scripts/seed-demo-state.ts (so the
+// two seed scripts agree on the same demo narrative).
 //
 // We also bump every other station's "freshness" so the engine prefers
 // the recently-confirmed bargain over older data.
 
 const COMMUTE = {
-  home: { lat: 37.7937, lng: -122.3935, address: "1 Steuart St, San Francisco, CA 94105" },
-  work: { lat: 37.7635, lng: -122.4145, address: "3154 17th St, San Francisco, CA 94110" },
+  home: { lat: 37.7912, lng: -122.4358, address: "2398 Pacific Ave, San Francisco, CA 94115" },
+  work: { lat: 37.7929, lng: -122.4014, address: "345 California St, San Francisco, CA 94104" },
 };
 
 const BARGAIN = {
-  address: "1395 Bryant St, San Francisco",
-  price: 4.39,
+  address: "1798 Bush St, San Francisco",
+  price: 5.85,
   // 7h ago lands in the $0.15 freshness-payout bracket (6h–12h) for a
   // demo-visible cashback. Pairs with high confidence so the 6h+
   // medium-bounty / stake gate stays off (bounty only triggers when
@@ -27,8 +30,11 @@ const BARGAIN = {
   reportCount: 3,
 };
 
-// Ensure neighbors aren't *also* in bargain territory so the contrast is clear.
-const NEIGHBORS_FLOOR = 5.05;
+// Floor neighbors so the bargain stays the visible cheapest. $6.45 puts
+// the contrast at ~$0.60/gal × 12gal = $7.20 gross savings before the
+// detour cost — close to the prior demo's spread and matches the "~$5-6
+// net after detour" claim in seed-demo-state.ts.
+const NEIGHBORS_FLOOR = 6.45;
 
 async function main() {
   const wallet = process.argv[2];
@@ -64,7 +70,7 @@ async function main() {
       process.exit(1);
     }
     console.log(
-      `BARGAIN: ${b.rows[0].name} — ${b.rows[0].address}  →  $${BARGAIN.price}/gal (${BARGAIN.confidence} confidence, ${BARGAIN.reportCount} reports, ~5min ago)\n`,
+      `BARGAIN: ${b.rows[0].name} — ${b.rows[0].address}  →  $${BARGAIN.price}/gal (${BARGAIN.confidence} confidence, ${BARGAIN.reportCount} reports, ~${BARGAIN.hoursAgo}h ago)\n`,
     );
 
     // 2) Floor every other station's price so the contrast holds.
@@ -100,7 +106,7 @@ async function main() {
       );
       if (u.rowCount && u.rowCount > 0) {
         console.log(
-          `\nUser ${wallet.slice(0, 10)}…${wallet.slice(-6)}: home → Steuart St, work → MindsDB`,
+          `\nUser ${wallet.slice(0, 10)}…${wallet.slice(-6)}: home → ${COMMUTE.home.address}, work → ${COMMUTE.work.address}`,
         );
       } else {
         console.log(
