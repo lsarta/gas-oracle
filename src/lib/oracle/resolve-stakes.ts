@@ -11,9 +11,15 @@ const REPORTS_AFTER_REQUIRED = 2;
  *  landed after the staked one.
  *
  *  Confirmation: the staked report's price is within 5% of the average of
- *  the 3 most recent reports (staked + 2 after).
- *  Slash: outside 5%. No stake return; user gets nothing beyond the
- *  already-halved cashback that landed when the outlier was detected. */
+ *  the 3 most recent reports (staked + 2 after). User receives the bounty.
+ *  Slash: outside 5%. User receives nothing beyond the already-halved
+ *  cashback that landed when the outlier was detected.
+ *
+ *  Note: corroboration-only model. stake_amount_usdc on the row records the
+ *  user's declared stake intent for audit but no USDC escrow is taken on
+ *  submit, so confirm pays the bounty only — paying stake+bounty here would
+ *  disburse funds that never entered. See SECURITY-TODO §1 for the
+ *  post-demo decision on whether to add real escrow. */
 export async function resolvePendingStakes(
   client: DbClient,
   stationId: string,
@@ -72,11 +78,12 @@ export async function resolvePendingStakes(
     const stakedPrice = Number(row.staked_price);
     const confirmed = isWithinTolerance(stakedPrice, miniConsensus);
 
-    const stakeAmount = Number(row.stake_amount);
     const bountyAmount = Number(row.bounty_amount);
 
     if (confirmed) {
-      const payout = Math.round((stakeAmount + bountyAmount) * 1_000_000) / 1_000_000;
+      // Corroboration-only: bounty only. The stake_amount column is
+      // informational (declared intent) since no USDC was escrowed on submit.
+      const payout = Math.round(bountyAmount * 1_000_000) / 1_000_000;
       let txHash: string | null = null;
       let txError: string | null = null;
       try {

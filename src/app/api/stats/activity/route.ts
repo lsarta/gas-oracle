@@ -83,17 +83,18 @@ export async function GET() {
       });
     }
     for (const r of stk.rows) {
+      // Corroboration-only: confirmed pays the bounty only (no escrow was
+      // taken on submit), slashed moves no USDC at all. Don't surface a
+      // stake_amount_usdc figure in the feed since it never moved.
       const amount =
-        r.status === "confirmed"
-          ? Number(r.stake_amount_usdc) + Number(r.bounty_amount_usdc)
-          : Number(r.stake_amount_usdc);
+        r.status === "confirmed" ? Number(r.bounty_amount_usdc) : 0;
       all.push({
         id: `stk-${r.id}`,
         kind: "stake_resolution",
         description:
           r.status === "confirmed"
-            ? "Stake confirmed (returned to reporter)"
-            : "Stake slashed",
+            ? "Stake confirmed (bounty paid)"
+            : "Stake slashed (no payout)",
         amountUsdc: amount,
         txHash: null,
         createdAt: r.resolved_at.toISOString(),

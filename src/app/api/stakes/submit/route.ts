@@ -22,15 +22,18 @@ const BodySchema = z.object({
 });
 
 /**
- * Demo-scope note on custody:
- * A full implementation pulls USDC from the user's Privy embedded wallet
- * into the master wallet's escrow via a server-initiated signed transfer
- * (Privy admin API + PRIVY_APP_SECRET). That transfer is out-of-scope for
- * this hackathon build — we record the staker's intent in the `stakes`
- * row (status='pending') and treat the stake as logically escrowed. The
- * resolution path DOES move real USDC on confirm (master → user covers
- * stake + bounty via sendUsdcToUser). Slashes keep the stake "notionally"
- * with the protocol.
+ * Demo-scope note on custody (corroboration-only model):
+ * No USDC escrow is taken from the user on submit. The `stakes` row records
+ * the staker's intent (stake_amount_usdc) and gates the report on
+ * corroboration — 2 follow-up reports within 5% of the staked price. On
+ * confirm, the resolver pays the BOUNTY only (not stake + bounty), since
+ * paying back a stake that never entered would disburse phantom funds. On
+ * slash, no USDC moves either direction.
+ *
+ * A full implementation would pull USDC from the user's Privy embedded
+ * wallet into master escrow via the Privy admin API + PRIVY_APP_SECRET on
+ * submit. That transfer (and the corresponding stake-return on confirm) is
+ * tracked in SECURITY-TODO §1 for the post-May-28 decision.
  */
 export async function POST(req: NextRequest) {
   const parsed = BodySchema.safeParse(await req.json().catch(() => null));
@@ -125,7 +128,7 @@ export async function POST(req: NextRequest) {
       isOutlier(impliedPrice, priorConsensus);
 
     // The normal freshness cashback still fires for staked reports (halved
-    // if outlier). Separately, the stake + bounty resolve later.
+    // if outlier). Separately, the bounty resolves later on corroboration.
     const freshnessPayout = computeFreshnessPayout(station.last_priced_at);
     const payoutAmount = wasOutlier
       ? Math.round(freshnessPayout * 0.5 * 1_000_000) / 1_000_000

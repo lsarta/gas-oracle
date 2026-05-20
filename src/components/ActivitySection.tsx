@@ -226,13 +226,14 @@ export function ActivitySection({ wallet }: { wallet: string }) {
                   </div>
                   <div className="text-right">
                     {s.status === "confirmed" ? (
+                      // Corroboration-only: only the bounty moves on confirm;
+                      // the stake_amount is informational.
                       <div className="font-mono text-[14px] text-emerald-600">
-                        +${(s.stakeAmountUsdc + s.bountyAmountUsdc).toFixed(2)} USDC
+                        +${s.bountyAmountUsdc.toFixed(2)} USDC
                       </div>
                     ) : (
-                      <div className="font-mono text-[14px] text-red-500">
-                        −${s.stakeAmountUsdc.toFixed(2)} USDC
-                      </div>
+                      // Slashed: no USDC was escrowed, so nothing is lost.
+                      <div className="text-[12px] text-zinc-500">No payout</div>
                     )}
                     <div className="mt-0.5 text-[11px] text-zinc-400">
                       {s.resolvedAt ? timeAgo(s.resolvedAt) : timeAgo(s.createdAt)}

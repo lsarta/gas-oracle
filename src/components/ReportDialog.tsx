@@ -421,15 +421,12 @@ export function ReportDialog({
                 </span>
               </div>
               <p className="text-[12px] leading-relaxed text-emerald-900">
-                If your price matches consensus after 2 more reports, you get back
-                ${station.stakeAmount.toFixed(2)} stake + $
-                {station.activeBounty.toFixed(2)} bounty = $
-                {(station.stakeAmount + station.activeBounty).toFixed(2)} USDC.
+                This report is stake-gated — it needs 2 follow-up reports
+                within 5% of your price to corroborate. If they do, you earn
+                the ${station.activeBounty.toFixed(2)} bounty.
               </p>
               <p className="text-[12px] leading-relaxed text-amber-800">
-                If your price is an outlier, the ${station.stakeAmount.toFixed(2)}
-                {" "}
-                stake is slashed.
+                If your price is an outlier, no bounty is paid.
               </p>
             </div>
             <div className="flex flex-col gap-2 pt-2">
@@ -457,12 +454,11 @@ export function ReportDialog({
             </div>
             <h2 className="text-[20px] font-medium text-zinc-900">Report staked</h2>
             <p className="font-mono text-[14px] text-zinc-900">
-              ${station.stakeAmount.toFixed(2)} staked · $
-              {station.activeBounty.toFixed(2)} bounty pending
+              Bounty pending: ${station.activeBounty.toFixed(2)}
             </p>
             <p className="max-w-xs text-[13px] leading-relaxed text-zinc-500">
-              Your stake is pending. We&apos;ll resolve it after 2 more reports on
-              this station.
+              Your stake-gated report is pending corroboration. We&apos;ll
+              resolve it after 2 more reports on this station.
             </p>
             <AutoCloseBar durationMs={AUTO_CLOSE_MS} />
           </div>
