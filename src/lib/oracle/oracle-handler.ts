@@ -177,109 +177,135 @@ export function createOracleHandler(config: OracleHandlerConfig) {
       );
     }
 
-    const settleResult = await facilitator.settle(paymentPayload, requirements);
-    if (!settleResult.success) {
-      return new Response(
-        JSON.stringify({
-          error: "Payment settlement failed",
-          reason: settleResult.errorReason,
-        }),
-        { status: 402, headers: { "Content-Type": "application/json" } },
-      );
-    }
-
-    const callerAddress = settleResult.payer ?? verifyResult.payer ?? "unknown";
+    // Reordered from the original "verify → settle → DB" sequence to
+    // "verify → DB query → settle → DB log". Reason: if the DB work threw
+    // anywhere after settle, the agent had already been billed on-chain but
+    // got a 500 with no data and no audit row. Now:
+    //   - DB SELECT before settle → on failure, no settle, agent not billed
+    //   - settle only after the answer is ready
+    //   - INSERT wrapped in try/catch → a failing audit row never denies
+    //     the agent the data they paid for; logged loudly for reconciliation
     const radiusMiles = radiusMinutes * MILES_PER_MINUTE;
-
     const client = createClient();
     await client.connect();
-
-    let payload: Record<string, unknown>;
     try {
-      const { rows } = await client.query(
-        `SELECT id, name, address, lat, lng, ${config.priceColumn} AS price, last_priced_at
-           FROM ${config.table}
-           WHERE ${config.priceColumn} IS NOT NULL`,
-      );
+      let payload: Record<string, unknown>;
+      try {
+        const { rows } = await client.query(
+          `SELECT id, name, address, lat, lng, ${config.priceColumn} AS price, last_priced_at
+             FROM ${config.table}
+             WHERE ${config.priceColumn} IS NOT NULL`,
+        );
 
-      type Raw = {
-        id: string;
-        name: string;
-        address: string;
-        lat: number;
-        lng: number;
-        price: string | number;
-        last_priced_at: Date | null;
-      };
-      const candidates = (rows as Raw[])
-        .map((r) => ({
-          id: r.id,
-          name: r.name,
-          address: r.address,
-          lat: Number(r.lat),
-          lng: Number(r.lng),
-          price: Number(r.price),
-          lastPricedAt: r.last_priced_at,
-          distanceMiles: haversineMiles(lat, lng, Number(r.lat), Number(r.lng)),
-        }))
-        .filter((r) => r.distanceMiles <= radiusMiles)
-        .sort((a, b) => a.price - b.price);
+        type Raw = {
+          id: string;
+          name: string;
+          address: string;
+          lat: number;
+          lng: number;
+          price: string | number;
+          last_priced_at: Date | null;
+        };
+        const candidates = (rows as Raw[])
+          .map((r) => ({
+            id: r.id,
+            name: r.name,
+            address: r.address,
+            lat: Number(r.lat),
+            lng: Number(r.lng),
+            price: Number(r.price),
+            lastPricedAt: r.last_priced_at,
+            distanceMiles: haversineMiles(lat, lng, Number(r.lat), Number(r.lng)),
+          }))
+          .filter((r) => r.distanceMiles <= radiusMiles)
+          .sort((a, b) => a.price - b.price);
 
-      if (candidates.length === 0) {
-        payload = {
-          [config.vertical === "gas" ? "station" : "location"]: null,
-          message: "No results within radius.",
-          queriedAt: new Date().toISOString(),
-        };
-      } else {
-        const top = candidates[0];
-        payload = {
-          ...config.formatResponse(
-            {
-              id: top.id,
-              name: top.name,
-              address: top.address,
-              lat: top.lat,
-              lng: top.lng,
-              price: top.price,
-              lastPricedAt: top.lastPricedAt,
-            },
-            Math.round(top.distanceMiles * 100) / 100,
-          ),
-          queriedAt: new Date().toISOString(),
-        };
+        if (candidates.length === 0) {
+          payload = {
+            [config.vertical === "gas" ? "station" : "location"]: null,
+            message: "No results within radius.",
+            queriedAt: new Date().toISOString(),
+          };
+        } else {
+          const top = candidates[0];
+          payload = {
+            ...config.formatResponse(
+              {
+                id: top.id,
+                name: top.name,
+                address: top.address,
+                lat: top.lat,
+                lng: top.lng,
+                price: top.price,
+                lastPricedAt: top.lastPricedAt,
+              },
+              Math.round(top.distanceMiles * 100) / 100,
+            ),
+            queriedAt: new Date().toISOString(),
+          };
+        }
+      } catch (err) {
+        console.error(
+          `[oracle-handler] pre-settle DB SELECT failed: ${err instanceof Error ? err.message : err}`,
+        );
+        return Response.json(
+          { error: "Internal error before settlement; no payment debited" },
+          { status: 500 },
+        );
       }
 
-      await client.query(
-        `INSERT INTO oracle_queries (caller_address, query_params, response_payload, amount_paid_usdc, payment_tx_id)
-         VALUES ($1, $2, $3, $4, $5)`,
-        [
-          callerAddress,
-          JSON.stringify({ vertical: config.vertical, lat, lng, radiusMinutes }),
-          JSON.stringify(payload),
-          PRICE_USD,
-          settleResult.transaction ?? null,
-        ],
-      );
+      // We have an answer — now settle.
+      const settleResult = await facilitator.settle(paymentPayload, requirements);
+      if (!settleResult.success) {
+        return new Response(
+          JSON.stringify({
+            error: "Payment settlement failed",
+            reason: settleResult.errorReason,
+          }),
+          { status: 402, headers: { "Content-Type": "application/json" } },
+        );
+      }
+      const callerAddress =
+        settleResult.payer ?? verifyResult.payer ?? "unknown";
+
+      // Best-effort audit log. Agent has already been billed at this point,
+      // so a failed INSERT must NOT block returning their paid-for data.
+      try {
+        await client.query(
+          `INSERT INTO oracle_queries (caller_address, query_params, response_payload, amount_paid_usdc, payment_tx_id)
+           VALUES ($1, $2, $3, $4, $5)`,
+          [
+            callerAddress,
+            JSON.stringify({ vertical: config.vertical, lat, lng, radiusMinutes }),
+            JSON.stringify(payload),
+            PRICE_USD,
+            settleResult.transaction ?? null,
+          ],
+        );
+      } catch (err) {
+        console.error(
+          `[oracle-handler] POST-SETTLE INSERT failed — agent BILLED but row not logged. caller=${callerAddress} tx=${settleResult.transaction} reason=${err instanceof Error ? err.message : err}`,
+        );
+      }
+
+      const settleResponseHeader = Buffer.from(
+        JSON.stringify({
+          success: true,
+          transaction: settleResult.transaction,
+          network: requirements.network,
+          payer: callerAddress,
+        }),
+      ).toString("base64");
+
+      return new Response(JSON.stringify(payload), {
+        status: 200,
+        headers: {
+          "Content-Type": "application/json",
+          "PAYMENT-RESPONSE": settleResponseHeader,
+        },
+      });
     } finally {
       await client.end();
     }
-
-    const settleResponseHeader = Buffer.from(
-      JSON.stringify({
-        success: true,
-        transaction: settleResult.transaction,
-        network: requirements.network,
-        payer: callerAddress,
-      }),
-    ).toString("base64");
-
-    return new Response(JSON.stringify(payload), {
-      status: 200,
-      headers: {
-        "Content-Type": "application/json",
-        "PAYMENT-RESPONSE": settleResponseHeader,
-      },
-    });
   };
 }
